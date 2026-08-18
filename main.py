@@ -1,5 +1,6 @@
 import hashlib
 import os
+import re
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
 from crawlerdetect import CrawlerDetect
@@ -10,10 +11,16 @@ import redis.asyncio as redis
 crawler_detect = CrawlerDetect()
 redis_client: redis.Redis | None = None
 
+# Require paths to match a realistic domain/page format (e.g., domain.tld/page)
+VALID_PATH_PATTERN = re.compile(
+    r"^[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}(\/[a-zA-Z0-9._~-]{4,})*$"
+)
+
 # Minimal 43-byte base64/hex 1x1 transparent GIF
 TRANSPARENT_1X1_GIF = bytes.fromhex(
     "47494638396101000100800000ffffff00000021f90401000000002c00000000010001000002024401003b"
 )
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -23,7 +30,9 @@ async def lifespan(app: FastAPI):
     yield
     await redis_client.aclose()
 
+
 app = FastAPI(lifespan=lifespan)
+
 
 # --- Shared Tracking Logic ---
 async def record_visit(
@@ -57,11 +66,26 @@ async def record_visit(
                 pipe.hincrby(daily_key, today_str, 1)
                 await pipe.execute()
 
+
 # Helper: Approximate text width in pixels for clean SVG rendering
 def estimate_text_width(text: str) -> int:
     return int(len(text) * 7.5 + 14)
 
-def build_badge_svg(label: str, count: int, color: str = "4c1") -> str:
+def format_color(color: str) -> str:
+    """Safely formats 3/6-digit hex codes or CSS color names."""
+    c = color.strip()
+    # If it's a valid hex string without '#', add '#'
+    if all(ch in "0123456789abcdefABCDEF" for ch in c) and len(c) in (3, 4, 6, 8):
+        return f"#{c}"
+    return c
+
+def build_badge_svg(
+    label: str,
+    count: int,
+    color: str = "4c1",
+    label_color: str = "555",
+    style: str = "flat",
+) -> str:
     count_str = str(count)
     label_width = estimate_text_width(label)
     count_width = estimate_text_width(count_str)
@@ -72,6 +96,14 @@ def build_badge_svg(label: str, count: int, color: str = "4c1") -> str:
 
     # Normalize hex color if '#' is omitted
     bg_color = color if color.startswith("#") else f"#{color}"
+    lbl_color = label_color if label_color.startswith("#") else f"#{label_color}"
+
+    # Square style removes corner radius and gradient overlay
+    is_square = style.lower() in ("flat-square", "square")
+    rx = "0" if is_square else "3"
+    gradient_overlay = (
+        "" if is_square else f'<rect width="{total_width}" height="20" fill="url(#b)"/>'
+    )
 
     return f"""<svg xmlns="http://www.w3.org/2000/svg" width="{total_width}" height="20">
   <linearGradient id="b" x2="0" y2="100%">
@@ -79,12 +111,12 @@ def build_badge_svg(label: str, count: int, color: str = "4c1") -> str:
     <stop offset="1" stop-opacity=".1"/>
   </linearGradient>
   <mask id="a">
-    <rect width="{total_width}" height="20" rx="3" fill="#fff"/>
+    <rect width="{total_width}" height="20" rx="{rx}" fill="#fff"/>
   </mask>
   <g mask="url(#a)">
-    <rect width="{label_width}" height="20" fill="#555"/>
+    <rect width="{label_width}" height="20" fill="{lbl_color}"/>
     <rect x="{label_width}" width="{count_width}" height="20" fill="{bg_color}"/>
-    <rect width="{total_width}" height="20" fill="url(#b)"/>
+    {gradient_overlay}
   </g>
   <g fill="#fff" text-anchor="middle" font-family="DejaVu Sans,Verdana,Geneva,sans-serif" font-size="11">
     <text x="{label_x}" y="15" fill="#010101" fill-opacity=".3">{label}</text>
@@ -93,6 +125,7 @@ def build_badge_svg(label: str, count: int, color: str = "4c1") -> str:
     <text x="{count_x}" y="14">{count_str}</text>
   </g>
 </svg>"""
+
 
 async def calculate_period_hits(page_key: str, period: str) -> tuple[str, int]:
     normalized_period = period.lower()
@@ -104,14 +137,18 @@ async def calculate_period_hits(page_key: str, period: str) -> tuple[str, int]:
 
     if normalized_period in ("7d", "week", "weekly"):
         today = datetime.now(timezone.utc).date()
-        past_7_days = [(today - timedelta(days=i)).strftime("%Y-%m-%d") for i in range(7)]
+        past_7_days = [
+            (today - timedelta(days=i)).strftime("%Y-%m-%d") for i in range(7)
+        ]
         values = await redis_client.hmget(f"hits:{page_key}:daily", past_7_days)
         hits = sum(int(v) for v in values if v is not None)
         return "7d hits", hits
 
     if normalized_period in ("30d", "month", "monthly"):
         today = datetime.now(timezone.utc).date()
-        past_30_days = [(today - timedelta(days=i)).strftime("%Y-%m-%d") for i in range(30)]
+        past_30_days = [
+            (today - timedelta(days=i)).strftime("%Y-%m-%d") for i in range(30)
+        ]
         values = await redis_client.hmget(f"hits:{page_key}:daily", past_30_days)
         hits = sum(int(v) for v in values if v is not None)
         return "30d hits", hits
@@ -120,17 +157,20 @@ async def calculate_period_hits(page_key: str, period: str) -> tuple[str, int]:
     hits = int(await redis_client.get(f"hits:{page_key}") or 0)
     return "hits", hits
 
+
 def calculate_time_windows(daily_data: dict[str, str]):
     today = datetime.now(timezone.utc).date()
-    
+
     # Generate past 30 day labels with zero-filled defaults
-    past_30_days = [(today - timedelta(days=i)).strftime("%Y-%m-%d") for i in range(29, -1, -1)]
+    past_30_days = [
+        (today - timedelta(days=i)).strftime("%Y-%m-%d") for i in range(29, -1, -1)
+    ]
     chart_labels = past_30_days
     chart_values = [int(daily_data.get(d, 0)) for d in past_30_days]
 
-    weekly_total = sum(chart_values[-7:])   # Last 7 days
-    monthly_total = sum(chart_values)       # Last 30 days
-    today_total = chart_values[-1]          # Today
+    weekly_total = sum(chart_values[-7:])  # Last 7 days
+    monthly_total = sum(chart_values)  # Last 30 days
+    today_total = chart_values[-1]  # Today
 
     return {
         "today": today_total,
@@ -140,9 +180,11 @@ def calculate_time_windows(daily_data: dict[str, str]):
         "chart_values": chart_values,
     }
 
+
 @app.get("/favicon.ico", include_in_schema=False)
 async def favicon():
     return Response(status_code=204)
+
 
 # 1. JSON Statistics Endpoint
 @app.get("/{path:path}/stats.json")
@@ -161,6 +203,7 @@ async def get_stats_json(path: str):
         "daily_history": dict(sorted(daily_hits.items())),
     }
 
+
 # 2. Silent JS Beacon Endpoint (Returns 204 No Content)
 @app.get("/{path:path}/track")
 @app.post("/{path:path}/track")
@@ -173,7 +216,9 @@ async def track_beacon(
     sec_purpose: str | None = Header(default=None),
 ):
     page_key = path.strip("/")
-    await record_visit(page_key, request, user_agent or "", x_forwarded_for, purpose, sec_purpose)
+    await record_visit(
+        page_key, request, user_agent or "", x_forwarded_for, purpose, sec_purpose
+    )
     return Response(status_code=204)
 
 
@@ -185,15 +230,26 @@ async def route_handler(
     period: str = Query(default="all"),
     label: str | None = Query(default=None),
     color: str = Query(default="4c1"),
+    labelColor: str = Query(default="555"),
+    style: str = Query(default="flat"),
     user_agent: str | None = Header(default=""),
     x_forwarded_for: str | None = Header(default=None),
     purpose: str | None = Header(default=None),
     sec_purpose: str | None = Header(default=None),
 ):
+    # --- Reject malformed, truncated, or scan paths ---
+    page_key = (
+        path.removesuffix(".svg").removesuffix(".gif").removesuffix(".png").strip("/")
+    )
+    if not VALID_PATH_PATTERN.match(page_key):
+        return Response(content="Invalid tracking path", status_code=400)
+
     # --- Silent 1x1 Pixel Route (.gif, .png) ---
     if path.endswith(".gif") or path.endswith(".png"):
         page_key = path.removesuffix(".gif").removesuffix(".png").strip("/")
-        await record_visit(page_key, request, user_agent or "", x_forwarded_for, purpose, sec_purpose)
+        await record_visit(
+            page_key, request, user_agent or "", x_forwarded_for, purpose, sec_purpose
+        )
         return Response(
             content=TRANSPARENT_1X1_GIF,
             media_type="image/gif",
@@ -207,10 +263,18 @@ async def route_handler(
     # --- Visible SVG Badge Route (.svg) ---
     if path.endswith(".svg"):
         page_key = path.removesuffix(".svg").strip("/")
-        await record_visit(page_key, request, user_agent or "", x_forwarded_for, purpose, sec_purpose)
+        await record_visit(
+            page_key, request, user_agent or "", x_forwarded_for, purpose, sec_purpose
+        )
         default_label, display_count = await calculate_period_hits(page_key, period)
         return Response(
-            content=build_badge_svg(label or default_label, display_count, color),
+            content=build_badge_svg(
+                label=label or default_label,
+                count=display_count,
+                color=color,
+                label_color=labelColor,
+                style=style,
+            ),
             media_type="image/svg+xml",
             headers={
                 "Cache-Control": "no-cache, no-store, must-revalidate, max-age=0",
@@ -222,7 +286,9 @@ async def route_handler(
     # --- HTML Dashboard (No Extension) ---
     page_key = path.strip("/")
     if not page_key:
-        return HTMLResponse("<h1>Hit Counter Service</h1><p>Append <code>.svg</code> for badges or <code>.gif</code> for silent tracking.</p>")
+        return HTMLResponse(
+            "<h1>Hit Counter Service</h1><p>Append <code>.svg</code> for badges or <code>.gif</code> for silent tracking.</p>"
+        )
 
     stored_total = int(await redis_client.get(f"hits:{page_key}") or 0)
     daily_data = await redis_client.hgetall(f"hits:{page_key}:daily")
