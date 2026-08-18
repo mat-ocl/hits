@@ -1,19 +1,19 @@
 services:
-  app:
-    build: .
-    container_name: hit_counter_app
+  hits:
+    image: ghcr.io/mat-ocl/hits:latest
+    container_name: hits
     restart: unless-stopped
     ports:
       - "8000:8000"
     environment:
-      - REDIS_URL=redis://redis:6379
+      - REDIS_URL=redis://hits_redis:6379
     depends_on:
-      redis:
+      hits_redis:
         condition: service_healthy
 
-  redis:
+  hits_redis:
     image: redis:7-alpine
-    container_name: hit_counter_redis
+    container_name: hits_redis
     restart: unless-stopped
     command: ["redis-server", "--appendonly", "yes"]
     volumes:
