@@ -7,6 +7,7 @@ services:
       - "8000:8000"
     environment:
       - REDIS_URL=redis://hits_redis:6379
+      - DEDUPE_WINDOW_SECONDS=300
     depends_on:
       hits_redis:
         condition: service_healthy
