@@ -25,7 +25,7 @@ async def route_handler(
     purpose: str | None = Header(default=None),
     sec_purpose: str | None = Header(default=None),
 ):
-    page_key = path.removesuffix(".svg").removesuffix(".gif").removesuffix(".png").strip("/")
+    page_key = path.removesuffix(".svg").removesuffix(".gif").removesuffix(".png").removesuffix(".json").strip("/")
     if not VALID_PATH_PATTERN.match(page_key):
         return Response(content="Invalid tracking path", status_code=400)
 
@@ -41,7 +41,25 @@ async def route_handler(
             media_type="image/gif",
             headers={"Cache-Control": "no-cache, no-store, must-revalidate, max-age=0"},
         )
+    # --- JSON Endpoint (.json) ---
+    if path.endswith(".json"):
+        if not is_preview:
+            await record_visit(page_key, request, user_agent or "", x_forwarded_for, purpose, sec_purpose)
 
+        stored_total = int(await database.redis_client.get(f"hits:{page_key}") or 0)
+        daily_data = await database.redis_client.hgetall(f"hits:{page_key}:daily")
+        metrics = calculate_time_windows(daily_data)
+        total_hits = max(stored_total, sum(int(v) for v in daily_data.values()))
+
+        return {
+            "page": page_key,
+            "total": total_hits,
+            "today": metrics["today"],
+            "last_7_days": metrics["weekly"],
+            "last_30_days": metrics["monthly"],
+            "daily": daily_data,
+        }
+    
     # Visible SVG Badge
     if path.endswith(".svg"):
         if not is_preview:
