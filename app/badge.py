@@ -26,6 +26,7 @@ def build_badge_svg(
     style: str = "flat",
     icon_path_d: str | None = None,
     logo_color: str = "fff",
+    link_url: str | None = None,
 ) -> str:
     count_str = str(count)
     style_norm = style.lower().replace("_", "-")
@@ -45,18 +46,16 @@ def build_badge_svg(
         cx = lw + (cw / 2)
         logo_svg = render_logo_svg(icon_path_d, logo_color, x_pos=8, y_offset=7, size=14) if has_logo else ""
 
-        return f"""<svg xmlns="http://www.w3.org/2000/svg" width="{tw}" height="28">
-  <mask id="a"><rect width="{tw}" height="28" rx="3" fill="#fff"/></mask>
-  <g mask="url(#a)">
-    <rect width="{lw}" height="28" fill="{lbl_color}"/>
-    <rect x="{lw}" width="{cw}" height="28" fill="{bg_color}"/>
-    {logo_svg}
-  </g>
-  <g fill="#fff" text-anchor="middle" font-family="Verdana,Geneva,DejaVu Sans,sans-serif" font-size="10" font-weight="bold" letter-spacing="1">
-    <text x="{lx}" y="17.5">{label_up}</text>
-    <text x="{cx}" y="17.5">{count_up}</text>
-  </g>
-</svg>"""
+        body = f"""  <mask id="a"><rect width="{tw}" height="28" rx="3" fill="#fff"/></mask>
+<g mask="url(#a)">
+  <rect width="{lw}" height="28" fill="{lbl_color}"/>
+  <rect x="{lw}" width="{cw}" height="28" fill="{bg_color}"/>
+  {logo_svg}
+</g>
+<g fill="#fff" text-anchor="middle" font-family="Verdana,Geneva,DejaVu Sans,sans-serif" font-size="10" font-weight="bold" letter-spacing="1">
+  <text x="{lx}" y="17.5">{label_up}</text>
+  <text x="{cx}" y="17.5">{count_up}</text>
+</g>"""
 
     # 20px Standard Badges
     logo_offset = 18 if has_logo else 0
@@ -71,71 +70,70 @@ def build_badge_svg(
     if style_norm == "social":
         cw_soc = cw + 6
         tw_soc = lw + cw_soc + 4
-        return f"""<svg xmlns="http://www.w3.org/2000/svg" width="{tw_soc}" height="20">
-  <rect width="{lw}" height="20" rx="3" fill="{lbl_color}" stroke="#d5d5d5"/>
-  {logo_svg}
-  <text x="{lx}" y="14" fill="#333" font-family="Helvetica Neue,Helvetica,Arial,sans-serif" font-size="11" font-weight="bold" text-anchor="middle">{label}</text>
-  <g transform="translate({lw + 4}, 0)">
-    <path d="M0 10 L4 6 L4 14 Z" fill="{bg_color}"/>
-    <rect x="4" width="{cw_soc - 4}" height="20" rx="3" fill="{bg_color}" stroke="#d5d5d5"/>
-    <text x="{(cw_soc + 4)/2}" y="14" fill="#333" font-family="Helvetica Neue,Helvetica,Arial,sans-serif" font-size="11" font-weight="bold" text-anchor="middle">{count_str}</text>
-  </g>
-</svg>"""
+        body = f"""  <rect width="{lw}" height="20" rx="3" fill="{lbl_color}" stroke="#d5d5d5"/>
+{logo_svg}
+<text x="{lx}" y="14" fill="#333" font-family="Helvetica Neue,Helvetica,Arial,sans-serif" font-size="11" font-weight="bold" text-anchor="middle">{label}</text>
+<g transform="translate({lw + 4}, 0)">
+  <path d="M0 10 L4 6 L4 14 Z" fill="{bg_color}"/>
+  <rect x="4" width="{cw_soc - 4}" height="20" rx="3" fill="{bg_color}" stroke="#d5d5d5"/>
+  <text x="{(cw_soc + 4)/2}" y="14" fill="#333" font-family="Helvetica Neue,Helvetica,Arial,sans-serif" font-size="11" font-weight="bold" text-anchor="middle">{count_str}</text>
+</g>"""
 
     # 3. PLASTIC
     if style_norm == "plastic":
-        return f"""<svg xmlns="http://www.w3.org/2000/svg" width="{tw}" height="20">
-  <linearGradient id="p" x2="0" y2="100%">
-    <stop offset="0" stop-color="#fff" stop-opacity=".7"/>
-    <stop offset=".1" stop-color="#aaa" stop-opacity=".1"/>
-    <stop offset=".9" stop-color="#000" stop-opacity=".3"/>
-    <stop offset="1" stop-color="#000" stop-opacity=".5"/>
-  </linearGradient>
-  <mask id="a"><rect width="{tw}" height="20" rx="4" fill="#fff"/></mask>
-  <g mask="url(#a)">
-    <rect width="{lw}" height="20" fill="{lbl_color}"/>
-    <rect x="{lw}" width="{cw}" height="20" fill="{bg_color}"/>
-    {logo_svg}
-    <rect width="{tw}" height="20" fill="url(#p)"/>
-  </g>
-  <g fill="#fff" text-anchor="middle" font-family="DejaVu Sans,Verdana,Geneva,sans-serif" font-size="11">
-    <text x="{lx}" y="15" fill="#010101" fill-opacity=".3">{label}</text>
-    <text x="{lx}" y="14">{label}</text>
-    <text x="{cx}" y="15" fill="#010101" fill-opacity=".3">{count_str}</text>
-    <text x="{cx}" y="14">{count_str}</text>
-  </g>
-</svg>"""
+        body = f"""  <linearGradient id="p" x2="0" y2="100%">
+  <stop offset="0" stop-color="#fff" stop-opacity=".7"/>
+  <stop offset=".1" stop-color="#aaa" stop-opacity=".1"/>
+  <stop offset=".9" stop-color="#000" stop-opacity=".3"/>
+  <stop offset="1" stop-color="#000" stop-opacity=".5"/>
+</linearGradient>
+<mask id="a"><rect width="{tw}" height="20" rx="4" fill="#fff"/></mask>
+<g mask="url(#a)">
+  <rect width="{lw}" height="20" fill="{lbl_color}"/>
+  <rect x="{lw}" width="{cw}" height="20" fill="{bg_color}"/>
+  {logo_svg}
+  <rect width="{tw}" height="20" fill="url(#p)"/>
+</g>
+<g fill="#fff" text-anchor="middle" font-family="DejaVu Sans,Verdana,Geneva,sans-serif" font-size="11">
+  <text x="{lx}" y="15" fill="#010101" fill-opacity=".3">{label}</text>
+  <text x="{lx}" y="14">{label}</text>
+  <text x="{cx}" y="15" fill="#010101" fill-opacity=".3">{count_str}</text>
+  <text x="{cx}" y="14">{count_str}</text>
+</g>"""
 
     # 4. FLAT-SQUARE
     if style_norm in ("flat-square", "square"):
-        return f"""<svg xmlns="http://www.w3.org/2000/svg" width="{tw}" height="20">
-  <g>
-    <rect width="{lw}" height="20" fill="{lbl_color}"/>
-    <rect x="{lw}" width="{cw}" height="20" fill="{bg_color}"/>
-    {logo_svg}
-  </g>
-  <g fill="#fff" text-anchor="middle" font-family="DejaVu Sans,Verdana,Geneva,sans-serif" font-size="11">
-    <text x="{lx}" y="15" fill="#010101" fill-opacity=".3">{label}</text>
-    <text x="{lx}" y="14">{label}</text>
-    <text x="{cx}" y="15" fill="#010101" fill-opacity=".3">{count_str}</text>
-    <text x="{cx}" y="14">{count_str}</text>
-  </g>
-</svg>"""
+        body = f"""  <g>
+  <rect width="{lw}" height="20" fill="{lbl_color}"/>
+  <rect x="{lw}" width="{cw}" height="20" fill="{bg_color}"/>
+  {logo_svg}
+</g>
+<g fill="#fff" text-anchor="middle" font-family="DejaVu Sans,Verdana,Geneva,sans-serif" font-size="11">
+  <text x="{lx}" y="15" fill="#010101" fill-opacity=".3">{label}</text>
+  <text x="{lx}" y="14">{label}</text>
+  <text x="{cx}" y="15" fill="#010101" fill-opacity=".3">{count_str}</text>
+  <text x="{cx}" y="14">{count_str}</text>
+</g>"""
 
     # 5. FLAT (Default)
-    return f"""<svg xmlns="http://www.w3.org/2000/svg" width="{tw}" height="20">
-  <linearGradient id="b" x2="0" y2="100%"><stop offset="0" stop-color="#bbb" stop-opacity=".1"/><stop offset="1" stop-opacity=".1"/></linearGradient>
-  <mask id="a"><rect width="{tw}" height="20" rx="3" fill="#fff"/></mask>
-  <g mask="url(#a)">
-    <rect width="{lw}" height="20" fill="{lbl_color}"/>
-    <rect x="{lw}" width="{cw}" height="20" fill="{bg_color}"/>
-    {logo_svg}
-    <rect width="{tw}" height="20" fill="url(#b)"/>
-  </g>
-  <g fill="#fff" text-anchor="middle" font-family="DejaVu Sans,Verdana,Geneva,sans-serif" font-size="11">
-    <text x="{lx}" y="15" fill="#010101" fill-opacity=".3">{label}</text>
-    <text x="{lx}" y="14">{label}</text>
-    <text x="{cx}" y="15" fill="#010101" fill-opacity=".3">{count_str}</text>
-    <text x="{cx}" y="14">{count_str}</text>
-  </g>
-</svg>"""
+    body = f"""  <linearGradient id="b" x2="0" y2="100%"><stop offset="0" stop-color="#bbb" stop-opacity=".1"/><stop offset="1" stop-opacity=".1"/></linearGradient>
+<mask id="a"><rect width="{tw}" height="20" rx="3" fill="#fff"/></mask>
+<g mask="url(#a)">
+  <rect width="{lw}" height="20" fill="{lbl_color}"/>
+  <rect x="{lw}" width="{cw}" height="20" fill="{bg_color}"/>
+  {logo_svg}
+  <rect width="{tw}" height="20" fill="url(#b)"/>
+</g>
+<g fill="#fff" text-anchor="middle" font-family="DejaVu Sans,Verdana,Geneva,sans-serif" font-size="11">
+  <text x="{lx}" y="15" fill="#010101" fill-opacity=".3">{label}</text>
+  <text x="{lx}" y="14">{label}</text>
+  <text x="{cx}" y="15" fill="#010101" fill-opacity=".3">{count_str}</text>
+  <text x="{cx}" y="14">{count_str}</text>
+</g>"""
+
+    height = 28 if style_norm in ("for-the-badge", "forthebadge") else 20
+
+    if link_url:
+      body = f'<a href="{link_url}" target="_blank">\n{body}\n</a>'
+
+    return f'<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="{tw}" height="{height}">\n{body}\n</svg>'

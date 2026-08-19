@@ -19,6 +19,7 @@ async def route_handler(
     label_color: str = Query(default="555", alias="labelColor"),
     logo_color: str = Query(default="fff", alias="logoColor"),
     logo: str | None = Query(default=None),
+    link: bool = Query(default=False),
     user_agent: str | None = Header(default=""),
     x_forwarded_for: str | None = Header(default=None),
     purpose: str | None = Header(default=None),
@@ -29,6 +30,7 @@ async def route_handler(
         return Response(content="Invalid tracking path", status_code=400)
 
     is_preview = "preview" in request.query_params or "no_count" in request.query_params
+    should_link = link or ("link" in request.query_params)
 
     # Silent 1x1 Pixel
     if path.endswith(".gif") or path.endswith(".png"):
@@ -47,6 +49,8 @@ async def route_handler(
         default_label, display_count = await calculate_period_hits(page_key, period)
         icon_path_d = await get_icon_path(logo) if logo else None
 
+        link_url = f"/{page_key}" if should_link else None
+
         return Response(
             content=build_badge_svg(
                 label=label or default_label,
@@ -56,6 +60,7 @@ async def route_handler(
                 style=style,
                 icon_path_d=icon_path_d,
                 logo_color=logo_color,
+                link_url=link_url,
             ),
             media_type="image/svg+xml",
             headers={"Cache-Control": "no-cache, no-store, must-revalidate, max-age=0"},
