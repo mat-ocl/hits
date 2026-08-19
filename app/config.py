@@ -1,6 +1,10 @@
 import os
 import re
 
+CURRENT_VERSION = "0.1.4-dev"
+GITHUB_REPO = "mat-ocl/hits"
+VERSION_CHECK_CACHE_SECONDS = 43200  # 12 hours
+
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379")
 DEDUPE_WINDOW_SECONDS = int(os.getenv("DEDUPE_WINDOW_SECONDS", "600"))
 

@@ -1,5 +1,7 @@
 FROM python:3.12-slim
 
+ARG APP_VERSION=0.1.0-dev
+
 WORKDIR /app
 
 # Set Python environment variables
@@ -12,6 +14,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy application code
 COPY . .
+
+# Permanently hardcode the built version directly into config.py
+RUN sed -i "s/CURRENT_VERSION = .*/CURRENT_VERSION = \"${APP_VERSION}\"/" app/config.py
 
 # Run as non-root user for security
 RUN useradd -m appuser && chown -R appuser /app

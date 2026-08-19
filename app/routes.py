@@ -3,6 +3,7 @@ from fastapi.responses import HTMLResponse
 from app import database
 from app.config import VALID_PATH_PATTERN, TRANSPARENT_1X1_GIF
 from app.tracker import record_visit, calculate_period_hits, calculate_time_windows
+from app.version import check_for_updates
 from app.icons import get_icon_path
 from app.badge import build_badge_svg
 
@@ -90,6 +91,20 @@ async def route_handler(
     metrics = calculate_time_windows(daily_data)
     total_hits = max(stored_total, sum(int(v) for v in daily_data.values()))
 
+    ver_info = await check_for_updates()
+
+    # Dynamic update badge next to current version
+    update_badge_html = ""
+    if ver_info["has_update"]:
+        update_badge_html = f"""
+        <span class="update-arrow">&rarr;</span>
+        <a href="https://github.com/mat-ocl/hits/releases/latest" target="_blank" rel="noopener noreferrer" class="update-badge" title="View latest release notes">
+          <span class="dot"></span>
+          <span class="badge-text-idle">v{ver_info["latest"]}</span>
+          <span class="badge-text-hover">Update available: v{ver_info["latest"]}</span>
+        </a>
+        """
+
     html_content = f"""
     <!DOCTYPE html>
     <html lang="en">
@@ -111,9 +126,53 @@ async def route_handler(
         .stat-value {{ font-size: 1.75rem; font-weight: 700; color: #38bdf8; margin-top: 0.25rem; }}
         .stat-label {{ font-size: 0.75rem; color: #94a3b8; text-transform: uppercase; font-weight: 600; letter-spacing: 0.05em; }}
         code {{ color: #38bdf8; background: #334155; padding: 0.2rem 0.4rem; border-radius: 4px; }}
-        .footer {{ text-align: center; margin-top: 2rem; color: #64748b; font-size: 0.8rem; }}
+
+        /* Footer & Version Badges */
+        .footer {{ display: flex; justify-content: center; align-items: center; margin-top: 2rem; color: #64748b; font-size: 0.8rem; flex-wrap: wrap; gap: 0.35rem; }}
         .footer a {{ color: #94a3b8; text-decoration: none; }}
         .footer a:hover {{ text-decoration: underline; }}
+        .version-badge {{ display: inline-block; padding: 0.1rem 0.4rem; font-size: 0.75rem; background: #1e293b; border: 1px solid #334155; border-radius: 4px; color: #94a3b8; }}
+        
+        .update-arrow {{ color: #475569; font-size: 0.85rem; user-select: none; margin: 0 0.1rem; }}
+        
+        /* Pulsing Update Badge */
+        .update-badge {{
+          display: inline-flex;
+          align-items: center;
+          gap: 0.35rem;
+          padding: 0.1rem 0.45rem;
+          font-size: 0.75rem;
+          font-weight: 600;
+          color: #f87171;
+          background: rgba(239, 68, 68, 0.12);
+          border: 1px solid rgba(239, 68, 68, 0.35);
+          border-radius: 4px;
+          text-decoration: none !important;
+          animation: pulse-border 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+          transition: all 0.2s ease-in-out;
+        }}
+        .update-badge:hover {{
+          background: rgba(239, 68, 68, 0.22);
+          border-color: #ef4444;
+          color: #fca5a5;
+        }}
+        .badge-text-hover {{ display: none; }}
+        .update-badge:hover .badge-text-idle {{ display: none; }}
+        .update-badge:hover .badge-text-hover {{ display: inline; }}
+
+        /* Pulsing Dot */
+        .dot {{
+          width: 6px;
+          height: 6px;
+          border-radius: 50%;
+          background-color: #ef4444;
+          box-shadow: 0 0 6px #ef4444;
+        }}
+
+        @keyframes pulse-border {{
+          0%, 100% {{ opacity: 1; }}
+          50% {{ opacity: 0.45; }}
+        }}
       </style>
     </head>
     <body>
@@ -122,9 +181,7 @@ async def route_handler(
           <h2>Analytics for <code>{page_key}</code></h2>
           <div class="header-actions">
             <a href="https://github.com/mat-ocl/hits" target="_blank" rel="noopener noreferrer" class="gh-link">
-              <svg viewBox="0 0 24 24">
-                <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/>
-              </svg>
+              <svg viewBox="0 0 24 24"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
               GitHub
             </a>
             <img src="/{page_key}.svg?preview" alt="Badge" />
@@ -139,6 +196,8 @@ async def route_handler(
         <div class="card"><canvas id="hitsChart"></canvas></div>
         <div class="footer">
           Powered by <a href="https://github.com/mat-ocl/hits" target="_blank" rel="noopener noreferrer">mat-ocl/hits</a>
+          <span class="version-badge">v{ver_info["current"]}</span>
+          {update_badge_html}
         </div>
       </div>
       <script>
