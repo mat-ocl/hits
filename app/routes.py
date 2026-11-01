@@ -1,5 +1,6 @@
+import html
 from fastapi import FastAPI, Request, Query, Header, Response
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse
 from app import database
 from app.config import VALID_PATH_PATTERN, TRANSPARENT_1X1_GIF
 from app.tracker import record_visit, calculate_period_hits, calculate_time_windows
@@ -8,6 +9,75 @@ from app.icons import get_icon_path
 from app.badge import build_badge_svg
 
 app = FastAPI(title="Hit Counter Service", lifespan=database.lifespan)
+
+
+@app.get("/", response_class=HTMLResponse)
+async def root_landing():
+    ver_info = await check_for_updates()
+    html_content = f"""
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+      <meta charset="UTF-8" />
+      <title>hits - Website Hit Counter Service</title>
+      <style>
+        body {{ font-family: system-ui, -apple-system, sans-serif; background: #0f172a; color: #f8fafc; padding: 2rem; display: flex; justify-content: center; }}
+        .container {{ max-width: 720px; width: 100%; }}
+        .card {{ background: #1e293b; border-radius: 12px; padding: 1.5rem; margin-bottom: 1.25rem; border: 1px solid #334155; }}
+        h1 {{ margin-top: 0; font-size: 1.6rem; }}
+        h3 {{ margin-top: 0; color: #38bdf8; font-size: 1rem; }}
+        p {{ color: #cbd5e1; line-height: 1.5; }}
+        code {{ color: #38bdf8; background: #334155; padding: 0.2rem 0.45rem; border-radius: 4px; font-size: 0.9rem; }}
+        ul {{ color: #cbd5e1; line-height: 1.8; padding-left: 1.25rem; }}
+        .footer {{ text-align: center; margin-top: 2rem; color: #64748b; font-size: 0.8rem; }}
+        .footer a {{ color: #94a3b8; text-decoration: none; }}
+        .version-badge {{ display: inline-block; padding: 0.1rem 0.4rem; font-size: 0.75rem; background: #1e293b; border: 1px solid #334155; border-radius: 4px; color: #94a3b8; }}
+      </style>
+    </head>
+    <body>
+      <div class="container">
+        <div class="card">
+          <h1>hits</h1>
+          <p>Lightweight, self-hosted website visitor &amp; hit counter service.</p>
+          <h3>Endpoints</h3>
+          <ul>
+            <li><code>/{{domain.tld}}/{{path}}.svg</code> &mdash; Customizable SVG hit badge</li>
+            <li><code>/{{domain.tld}}/{{path}}.gif</code> &mdash; Silent 1&times;1 tracking pixel</li>
+            <li><code>/{{domain.tld}}/{{path}}.json</code> &mdash; JSON hit metrics API</li>
+            <li><code>/{{domain.tld}}/{{path}}</code> &mdash; Analytics dashboard</li>
+          </ul>
+        </div>
+        <div class="footer">
+          Powered by <a href="https://github.com/mat-ocl/hits" target="_blank" rel="noopener noreferrer">mat-ocl/hits</a>
+          <span class="version-badge">v{html.escape(ver_info["current"])}</span>
+        </div>
+      </div>
+    </body>
+    </html>
+    """
+    return HTMLResponse(content=html_content)
+
+
+@app.get("/health")
+async def health_check():
+    if not database.redis_client:
+        return JSONResponse(status_code=503, content={"status": "error", "detail": "Redis not initialized"})
+    try:
+        await database.redis_client.ping()
+        return {"status": "ok"}
+    except Exception:
+        return JSONResponse(status_code=503, content={"status": "error", "detail": "Redis unavailable"})
+
+
+@app.get("/robots.txt", response_class=PlainTextResponse)
+async def robots_txt():
+    return PlainTextResponse(content="User-agent: *\nDisallow: /\n")
+
+
+@app.get("/favicon.ico")
+async def favicon():
+    return Response(status_code=204)
+
 
 @app.get("/{path:path}")
 async def route_handler(
@@ -27,8 +97,9 @@ async def route_handler(
     sec_purpose: str | None = Header(default=None),
 ):
     page_key = path.removesuffix(".svg").removesuffix(".gif").removesuffix(".png").removesuffix(".json").strip("/")
-    if not VALID_PATH_PATTERN.match(page_key):
+    if len(page_key) > 255 or not VALID_PATH_PATTERN.match(page_key):
         return Response(content="Invalid tracking path", status_code=400)
+
 
     is_preview = "preview" in request.query_params or "no_count" in request.query_params
     should_link = link or ("link" in request.query_params)
@@ -92,6 +163,9 @@ async def route_handler(
     total_hits = max(stored_total, sum(int(v) for v in daily_data.values()))
 
     ver_info = await check_for_updates()
+    safe_page_key = html.escape(page_key, quote=True)
+    safe_current_ver = html.escape(ver_info["current"])
+    safe_latest_ver = html.escape(ver_info["latest"])
 
     # Dynamic update badge next to current version
     update_badge_html = ""
@@ -100,8 +174,8 @@ async def route_handler(
         <span class="update-arrow">&rarr;</span>
         <a href="https://github.com/mat-ocl/hits/releases/latest" target="_blank" rel="noopener noreferrer" class="update-badge" title="View latest release notes">
           <span class="dot"></span>
-          <span class="badge-text-idle">v{ver_info["latest"]}</span>
-          <span class="badge-text-hover">Update available: v{ver_info["latest"]}</span>
+          <span class="badge-text-idle">v{safe_latest_ver}</span>
+          <span class="badge-text-hover">Update available: v{safe_latest_ver}</span>
         </a>
         """
 
@@ -110,7 +184,7 @@ async def route_handler(
     <html lang="en">
     <head>
       <meta charset="UTF-8" />
-      <title>Analytics - {page_key}</title>
+      <title>Analytics - {safe_page_key}</title>
       <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
       <style>
         body {{ font-family: system-ui, -apple-system, sans-serif; background: #0f172a; color: #f8fafc; padding: 2rem; display: flex; justify-content: center; }}
@@ -178,13 +252,13 @@ async def route_handler(
     <body>
       <div class="container">
         <div class="header">
-          <h2>Analytics for <code>{page_key}</code></h2>
+          <h2>Analytics for <code>{safe_page_key}</code></h2>
           <div class="header-actions">
             <a href="https://github.com/mat-ocl/hits" target="_blank" rel="noopener noreferrer" class="gh-link">
               <svg viewBox="0 0 24 24"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
               GitHub
             </a>
-            <img src="/{page_key}.svg?preview" alt="Badge" />
+            <img src="/{safe_page_key}.svg?preview" alt="Badge" />
           </div>
         </div>
         <div class="stats-grid">
@@ -196,7 +270,7 @@ async def route_handler(
         <div class="card"><canvas id="hitsChart"></canvas></div>
         <div class="footer">
           Powered by <a href="https://github.com/mat-ocl/hits" target="_blank" rel="noopener noreferrer">mat-ocl/hits</a>
-          <span class="version-badge">v{ver_info["current"]}</span>
+          <span class="version-badge">v{safe_current_ver}</span>
           {update_badge_html}
         </div>
       </div>
