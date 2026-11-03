@@ -1,10 +1,17 @@
 from packaging import version
 from app import database
-from app.config import CURRENT_VERSION, GITHUB_REPO, VERSION_CHECK_CACHE_SECONDS
+from app.config import (
+    CURRENT_VERSION,
+    GITHUB_REPO,
+    VERSION_CHECK_CACHE_SECONDS,
+    VERSION_CHECK_FAILURE_CACHE_SECONDS,
+)
+
 
 async def check_for_updates() -> dict:
     cache_key = "system:latest_version"
-    
+    clean_current = CURRENT_VERSION.lstrip("v").strip()
+
     latest_ver_str = None
     if database.redis_client:
         latest_ver_str = await database.redis_client.get(cache_key)
@@ -24,15 +31,28 @@ async def check_for_updates() -> dict:
                     latest_ver_str = tag
                     if database.redis_client:
                         await database.redis_client.set(
-                            cache_key, 
-                            latest_ver_str, 
-                            ex=VERSION_CHECK_CACHE_SECONDS
+                            cache_key,
+                            latest_ver_str,
+                            ex=VERSION_CHECK_CACHE_SECONDS,
                         )
+            elif database.redis_client:
+                await database.redis_client.set(
+                    cache_key,
+                    clean_current,
+                    ex=VERSION_CHECK_FAILURE_CACHE_SECONDS,
+                )
         except Exception:
-            pass
+            if database.redis_client:
+                try:
+                    await database.redis_client.set(
+                        cache_key,
+                        clean_current,
+                        ex=VERSION_CHECK_FAILURE_CACHE_SECONDS,
+                    )
+                except Exception:
+                    pass
 
     has_update = False
-    clean_current = CURRENT_VERSION.lstrip("v").strip()
 
     if latest_ver_str:
         try:

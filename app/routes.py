@@ -1,14 +1,34 @@
 import html
 from fastapi import FastAPI, Request, Query, Header, Response
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse
 from app import database
-from app.config import VALID_PATH_PATTERN, TRANSPARENT_1X1_GIF
+from app.config import (
+    VALID_PATH_PATTERN,
+    TRANSPARENT_1X1_GIF,
+    TRANSPARENT_1X1_PNG,
+    is_domain_allowed,
+)
 from app.tracker import record_visit, calculate_period_hits, calculate_time_windows
 from app.version import check_for_updates
 from app.icons import get_icon_path
 from app.badge import build_badge_svg
 
 app = FastAPI(title="Hit Counter Service", lifespan=database.lifespan)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["GET", "HEAD", "OPTIONS"],
+    allow_headers=["*"],
+)
+
+NO_CACHE_HEADERS = {
+    "Cache-Control": "no-cache, no-store, must-revalidate, max-age=0",
+    "Pragma": "no-cache",
+    "Expires": "0",
+}
+
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -99,7 +119,8 @@ async def route_handler(
     page_key = path.removesuffix(".svg").removesuffix(".gif").removesuffix(".png").removesuffix(".json").strip("/")
     if len(page_key) > 255 or not VALID_PATH_PATTERN.match(page_key):
         return Response(content="Invalid tracking path", status_code=400)
-
+    if not is_domain_allowed(page_key):
+        return Response(content="Domain not allowed", status_code=403)
 
     is_preview = "preview" in request.query_params or "no_count" in request.query_params
     should_link = link or ("link" in request.query_params)
@@ -108,10 +129,11 @@ async def route_handler(
     if path.endswith(".gif") or path.endswith(".png"):
         if not is_preview:
             await record_visit(page_key, request, user_agent or "", x_forwarded_for, purpose, sec_purpose)
+        is_png = path.endswith(".png")
         return Response(
-            content=TRANSPARENT_1X1_GIF,
-            media_type="image/gif",
-            headers={"Cache-Control": "no-cache, no-store, must-revalidate, max-age=0"},
+            content=TRANSPARENT_1X1_PNG if is_png else TRANSPARENT_1X1_GIF,
+            media_type="image/png" if is_png else "image/gif",
+            headers=NO_CACHE_HEADERS,
         )
     # --- JSON Endpoint (.json) ---
     if path.endswith(".json"):
@@ -123,14 +145,17 @@ async def route_handler(
         metrics = calculate_time_windows(daily_data)
         total_hits = max(stored_total, sum(int(v) for v in daily_data.values()))
 
-        return {
-            "page": page_key,
-            "total": total_hits,
-            "today": metrics["today"],
-            "last_7_days": metrics["weekly"],
-            "last_30_days": metrics["monthly"],
-            "daily": daily_data,
-        }
+        return JSONResponse(
+            content={
+                "page": page_key,
+                "total": total_hits,
+                "today": metrics["today"],
+                "last_7_days": metrics["weekly"],
+                "last_30_days": metrics["monthly"],
+                "daily": daily_data,
+            },
+            headers=NO_CACHE_HEADERS,
+        )
     
     # Visible SVG Badge
     if path.endswith(".svg"):
@@ -153,8 +178,9 @@ async def route_handler(
                 link_url=link_url,
             ),
             media_type="image/svg+xml",
-            headers={"Cache-Control": "no-cache, no-store, must-revalidate, max-age=0"},
+            headers=NO_CACHE_HEADERS,
         )
+
 
     # HTML Dashboard
     stored_total = int(await database.redis_client.get(f"hits:{page_key}") or 0)

@@ -9,7 +9,7 @@ updates:
     commit-message:
       prefix: "deps(pip)"
 
-  # Docker base image (python:3.12-slim)
+  # Docker base image (python:3.14-slim)
   - package-ecosystem: "docker"
     directory: "/"
     schedule:
@@ -23,6 +23,6 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
-    open-pull-requests-limit: 3
+    open-pull-requests-limit: 5
     commit-message:
       prefix: "deps(actions)"

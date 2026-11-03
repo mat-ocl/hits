@@ -8,6 +8,8 @@ services:
     environment:
       - REDIS_URL=redis://hits_redis:6379
       - DEDUPE_WINDOW_SECONDS=10
+      - ALLOWED_DOMAINS=*
+      - TRUST_PROXY_HEADERS=true
     depends_on:
       hits_redis:
         condition: service_healthy

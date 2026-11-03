@@ -3,7 +3,7 @@ from datetime import datetime, timezone, timedelta
 from fastapi import Request
 from crawlerdetect import CrawlerDetect
 from app import database
-from app.config import DEDUPE_WINDOW_SECONDS
+from app.config import DEDUPE_WINDOW_SECONDS, HASH_SALT, TRUST_PROXY_HEADERS
 
 crawler_detect = CrawlerDetect()
 
@@ -21,14 +21,17 @@ async def record_visit(
 
     client_ip = (
         x_forwarded_for.split(",")[0].strip()
-        if x_forwarded_for
+        if (TRUST_PROXY_HEADERS and x_forwarded_for)
         else (request.client.host if request.client else "unknown")
     )
 
-    visitor_hash = hashlib.sha256(f"{client_ip}:{page_key}".encode()).hexdigest()
+    visitor_hash = hashlib.sha256(
+        f"{HASH_SALT}:{today_str}:{client_ip}:{page_key}".encode()
+    ).hexdigest()
     dedupe_key = f"seen:{visitor_hash}"
     counter_key = f"hits:{page_key}"
     daily_key = f"hits:{page_key}:daily"
+
 
     if not (is_bot or is_prefetch) and database.redis_client:
         was_set = await database.redis_client.set(
