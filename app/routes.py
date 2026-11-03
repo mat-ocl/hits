@@ -1,4 +1,5 @@
 import html
+import json
 from fastapi import FastAPI, Request, Query, Header, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse
@@ -213,6 +214,7 @@ async def route_handler(
       <title>Analytics - {safe_page_key}</title>
       <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
       <style>
+        :root {{ color-scheme: dark; }}
         body {{ font-family: system-ui, -apple-system, sans-serif; background: #0f172a; color: #f8fafc; padding: 2rem; display: flex; justify-content: center; }}
         .container {{ max-width: 850px; width: 100%; }}
         .header {{ display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; flex-wrap: wrap; gap: 1rem; }}
@@ -220,12 +222,82 @@ async def route_handler(
         .gh-link {{ display: inline-flex; align-items: center; gap: 0.4rem; color: #94a3b8; text-decoration: none; font-size: 0.85rem; font-weight: 500; padding: 0.4rem 0.75rem; border-radius: 6px; border: 1px solid #334155; transition: all 0.2s ease; }}
         .gh-link:hover {{ color: #f8fafc; background: #1e293b; border-color: #475569; }}
         .gh-link svg {{ width: 16px; height: 16px; fill: currentColor; }}
-        .card {{ background: #1e293b; border-radius: 12px; padding: 1.5rem; margin-bottom: 1.5rem; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1); }}
-        .stats-grid {{ display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; margin-bottom: 1.5rem; }}
+        .card {{ background: #1e293b; border-radius: 12px; padding: 1.5rem; margin-bottom: 1.5rem; border: 1px solid #334155; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1); }}
+        .stats-grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 1rem; margin-bottom: 1.5rem; }}
         .stat-box {{ background: #1e293b; padding: 1.25rem; border-radius: 10px; border: 1px solid #334155; }}
         .stat-value {{ font-size: 1.75rem; font-weight: 700; color: #38bdf8; margin-top: 0.25rem; }}
         .stat-label {{ font-size: 0.75rem; color: #94a3b8; text-transform: uppercase; font-weight: 600; letter-spacing: 0.05em; }}
         code {{ color: #38bdf8; background: #334155; padding: 0.2rem 0.4rem; border-radius: 4px; }}
+
+        /* Badge Builder Form & Embeds */
+        fieldset {{ border: 0; margin: 0; padding: 0; }}
+        legend {{ font-size: 1.05rem; font-weight: 600; color: #f8fafc; margin-bottom: 1rem; padding: 0; }}
+        .builder-grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1.15rem; margin-bottom: 1.25rem; }}
+        .form-field {{ display: flex; flex-direction: column; }}
+        .form-field label {{ font-size: 0.8rem; font-weight: 600; color: #cbd5e1; margin-bottom: 0.35rem; }}
+        .form-field input, .form-field select {{
+          font-size: 1rem;
+          padding: 0.55rem 0.75rem;
+          min-height: 42px;
+          border-radius: 6px;
+          border: 1px solid #475569;
+          background: #0f172a;
+          color: #f8fafc;
+          box-sizing: border-box;
+        }}
+        .form-field input:focus-visible, .form-field select:focus-visible, .copy-btn:focus-visible {{
+          outline: 2px solid #38bdf8;
+          outline-offset: 2px;
+        }}
+        .form-field input:user-invalid {{ border-color: #ef4444; }}
+        .preview-bar {{
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 1rem;
+          padding: 0.85rem 1rem;
+          background: #0f172a;
+          border: 1px solid #334155;
+          border-radius: 8px;
+          margin-bottom: 1.25rem;
+          flex-wrap: wrap;
+        }}
+        .preview-label {{ font-size: 0.8rem; color: #94a3b8; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; }}
+        .snippet-list {{ display: flex; flex-direction: column; gap: 0.75rem; }}
+        .snippet-row {{ display: flex; flex-direction: column; gap: 0.3rem; }}
+        .snippet-title {{ font-size: 0.75rem; color: #94a3b8; font-weight: 600; }}
+        .snippet-box {{
+          display: flex;
+          align-items: center;
+          gap: 0.5rem;
+          background: #0f172a;
+          border: 1px solid #334155;
+          border-radius: 6px;
+          padding: 0.45rem 0.65rem;
+        }}
+        .snippet-code {{
+          flex: 1;
+          font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+          font-size: 0.82rem;
+          color: #e2e8f0;
+          background: transparent;
+          padding: 0;
+          overflow-x: auto;
+          white-space: nowrap;
+        }}
+        .copy-btn {{
+          background: #334155;
+          color: #f8fafc;
+          border: 1px solid #475569;
+          border-radius: 5px;
+          padding: 0.35rem 0.7rem;
+          font-size: 0.78rem;
+          font-weight: 600;
+          cursor: pointer;
+          transition: background 0.15s ease;
+          flex-shrink: 0;
+        }}
+        .copy-btn:hover {{ background: #475569; }}
 
         /* Footer & Version Badges */
         .footer {{ display: flex; justify-content: center; align-items: center; margin-top: 2rem; color: #64748b; font-size: 0.8rem; flex-wrap: wrap; gap: 0.35rem; }}
@@ -294,6 +366,84 @@ async def route_handler(
           <div class="stat-box"><div class="stat-label">All-Time</div><div class="stat-value">{total_hits}</div></div>
         </div>
         <div class="card"><canvas id="hitsChart"></canvas></div>
+        <div class="card">
+          <form id="badgeBuilderForm" action="/{safe_page_key}.svg" method="GET">
+            <fieldset>
+              <legend>Badge &amp; Embed Builder</legend>
+              <div class="builder-grid">
+                <div class="form-field">
+                  <label for="b-style">Style</label>
+                  <select id="b-style" name="style">
+                    <option value="flat">flat</option>
+                    <option value="flat-square">flat-square</option>
+                    <option value="plastic">plastic</option>
+                    <option value="for-the-badge">for-the-badge</option>
+                    <option value="social">social</option>
+                  </select>
+                </div>
+                <div class="form-field">
+                  <label for="b-period">Period</label>
+                  <select id="b-period" name="period">
+                    <option value="all">all-time</option>
+                    <option value="today">today</option>
+                    <option value="7d">last 7 days (7d)</option>
+                    <option value="30d">last 30 days (30d)</option>
+                  </select>
+                </div>
+                <div class="form-field">
+                  <label for="b-label">Custom Label</label>
+                  <input type="text" id="b-label" name="label" placeholder="hits" maxlength="40" />
+                </div>
+                <div class="form-field">
+                  <label for="b-color">Badge Color</label>
+                  <input type="text" id="b-color" name="color" value="4c1" maxlength="20" autocorrect="off" autocapitalize="off" spellcheck="false" />
+                </div>
+                <div class="form-field">
+                  <label for="b-label-color">Label Color</label>
+                  <input type="text" id="b-label-color" name="labelColor" value="555" maxlength="20" autocorrect="off" autocapitalize="off" spellcheck="false" />
+                </div>
+                <div class="form-field">
+                  <label for="b-logo">Logo (Simple Icons)</label>
+                  <input type="text" id="b-logo" name="logo" placeholder="github, python..." maxlength="40" autocorrect="off" autocapitalize="off" spellcheck="false" />
+                </div>
+              </div>
+              <div class="preview-bar">
+                <span class="preview-label">Live Preview</span>
+                <img id="builderPreviewImg" src="/{safe_page_key}.svg?preview" alt="Live badge preview" />
+              </div>
+              <div class="snippet-list">
+                <div class="snippet-row">
+                  <span class="snippet-title">Markdown Badge</span>
+                  <div class="snippet-box">
+                    <code id="snip-md" class="snippet-code"></code>
+                    <button type="button" class="copy-btn" data-copy-target="snip-md">Copy</button>
+                  </div>
+                </div>
+                <div class="snippet-row">
+                  <span class="snippet-title">HTML Badge</span>
+                  <div class="snippet-box">
+                    <code id="snip-html" class="snippet-code"></code>
+                    <button type="button" class="copy-btn" data-copy-target="snip-html">Copy</button>
+                  </div>
+                </div>
+                <div class="snippet-row">
+                  <span class="snippet-title">Silent Tracking Pixel (1&times;1 GIF)</span>
+                  <div class="snippet-box">
+                    <code id="snip-pixel" class="snippet-code"></code>
+                    <button type="button" class="copy-btn" data-copy-target="snip-pixel">Copy</button>
+                  </div>
+                </div>
+                <div class="snippet-row">
+                  <span class="snippet-title">JSON Metrics Endpoint</span>
+                  <div class="snippet-box">
+                    <code id="snip-json" class="snippet-code"></code>
+                    <button type="button" class="copy-btn" data-copy-target="snip-json">Copy</button>
+                  </div>
+                </div>
+              </div>
+            </fieldset>
+          </form>
+        </div>
         <div class="footer">
           Powered by <a href="https://github.com/mat-ocl/hits" target="_blank" rel="noopener noreferrer">mat-ocl/hits</a>
           <span class="version-badge">v{safe_current_ver}</span>
@@ -326,6 +476,67 @@ async def route_handler(
             plugins: {{ legend: {{ labels: {{ color: '#f8fafc' }} }} }}
           }}
         }});
+
+        const pageKey = {json.dumps(page_key)};
+        const builderForm = document.getElementById('badgeBuilderForm');
+        const previewImg = document.getElementById('builderPreviewImg');
+        const snipMd = document.getElementById('snip-md');
+        const snipHtml = document.getElementById('snip-html');
+        const snipPixel = document.getElementById('snip-pixel');
+        const snipJson = document.getElementById('snip-json');
+
+        function updateEmbeds() {{
+          const params = new URLSearchParams();
+          const style = document.getElementById('b-style').value;
+          const period = document.getElementById('b-period').value;
+          const label = document.getElementById('b-label').value.trim();
+          const color = document.getElementById('b-color').value.trim();
+          const labelColor = document.getElementById('b-label-color').value.trim();
+          const logo = document.getElementById('b-logo').value.trim();
+
+          if (style && style !== 'flat') params.set('style', style);
+          if (period && period !== 'all') params.set('period', period);
+          if (label) params.set('label', label);
+          if (color && color !== '4c1') params.set('color', color);
+          if (labelColor && labelColor !== '555') params.set('labelColor', labelColor);
+          if (logo) params.set('logo', logo);
+
+          const qs = params.toString();
+          const querySuffix = qs ? `?${{qs}}` : '';
+          const previewParams = new URLSearchParams(params);
+          previewParams.set('preview', '');
+          previewImg.src = `/${{pageKey}}.svg?${{previewParams.toString()}}`;
+
+          const origin = window.location.origin;
+          const badgeUrl = `${{origin}}/${{pageKey}}.svg${{querySuffix}}`;
+          const dashUrl = `${{origin}}/${{pageKey}}`;
+          snipMd.textContent = `[![Hits](${{badgeUrl}})](${{dashUrl}})`;
+          snipHtml.textContent = `<a href="${{dashUrl}}"><img src="${{badgeUrl}}" alt="Hits"></a>`;
+          snipPixel.textContent = `<img src="${{origin}}/${{pageKey}}.gif" alt="" width="1" height="1" style="display:none">`;
+          snipJson.textContent = `${{origin}}/${{pageKey}}.json`;
+        }}
+
+        builderForm.addEventListener('submit', (e) => e.preventDefault());
+        builderForm.addEventListener('input', updateEmbeds);
+        builderForm.addEventListener('change', updateEmbeds);
+
+        document.querySelectorAll('.copy-btn').forEach((btn) => {{
+          btn.addEventListener('click', async () => {{
+            const targetId = btn.getAttribute('data-copy-target');
+            const targetEl = document.getElementById(targetId);
+            if (!targetEl) return;
+            try {{
+              await navigator.clipboard.writeText(targetEl.textContent);
+              const prev = btn.textContent;
+              btn.textContent = 'Copied!';
+              setTimeout(() => {{ btn.textContent = prev; }}, 1500);
+            }} catch {{
+              btn.textContent = 'Error';
+            }}
+          }});
+        }});
+
+        updateEmbeds();
       </script>
     </body>
     </html>
