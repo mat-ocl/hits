@@ -35,6 +35,18 @@ NO_CACHE_HEADERS = {
 @app.get("/", response_class=HTMLResponse)
 async def root_landing():
     ver_info = await check_for_updates()
+    safe_current_ver = html.escape(ver_info["current"])
+    safe_latest_ver = html.escape(ver_info["latest"])
+    update_badge_html = ""
+    if ver_info["has_update"]:
+        update_badge_html = f"""
+        <span class="update-arrow">&rarr;</span>
+        <a href="https://github.com/mat-ocl/hits/releases/latest" target="_blank" rel="noopener noreferrer" class="update-badge" title="View latest release notes">
+          <span class="dot"></span>
+          <span class="badge-text-idle">v{safe_latest_ver}</span>
+          <span class="badge-text-hover">Update available: v{safe_latest_ver}</span>
+        </a>
+        """
     html_content = f"""
     <!DOCTYPE html>
     <html lang="en">
@@ -42,6 +54,7 @@ async def root_landing():
       <meta charset="UTF-8" />
       <title>hits - Website Hit Counter Service</title>
       <style>
+        :root {{ color-scheme: dark; }}
         body {{ font-family: system-ui, -apple-system, sans-serif; background: #0f172a; color: #f8fafc; padding: 2rem; display: flex; justify-content: center; }}
         .container {{ max-width: 720px; width: 100%; }}
         .card {{ background: #1e293b; border-radius: 12px; padding: 1.5rem; margin-bottom: 1.25rem; border: 1px solid #334155; }}
@@ -50,9 +63,32 @@ async def root_landing():
         p {{ color: #cbd5e1; line-height: 1.5; }}
         code {{ color: #38bdf8; background: #334155; padding: 0.2rem 0.45rem; border-radius: 4px; font-size: 0.9rem; }}
         ul {{ color: #cbd5e1; line-height: 1.8; padding-left: 1.25rem; }}
-        .footer {{ text-align: center; margin-top: 2rem; color: #64748b; font-size: 0.8rem; }}
+        .footer {{ display: flex; justify-content: center; align-items: center; margin-top: 2rem; color: #64748b; font-size: 0.8rem; flex-wrap: wrap; gap: 0.35rem; }}
         .footer a {{ color: #94a3b8; text-decoration: none; }}
+        .footer a:hover {{ text-decoration: underline; }}
         .version-badge {{ display: inline-block; padding: 0.1rem 0.4rem; font-size: 0.75rem; background: #1e293b; border: 1px solid #334155; border-radius: 4px; color: #94a3b8; }}
+        .update-arrow {{ color: #475569; font-size: 0.85rem; user-select: none; margin: 0 0.1rem; }}
+        .update-badge {{
+          display: inline-flex;
+          align-items: center;
+          gap: 0.35rem;
+          padding: 0.1rem 0.45rem;
+          font-size: 0.75rem;
+          font-weight: 600;
+          color: #f87171;
+          background: rgba(239, 68, 68, 0.12);
+          border: 1px solid rgba(239, 68, 68, 0.35);
+          border-radius: 4px;
+          text-decoration: none !important;
+          animation: pulse-border 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+          transition: all 0.2s ease-in-out;
+        }}
+        .update-badge:hover {{ background: rgba(239, 68, 68, 0.22); border-color: #ef4444; color: #fca5a5; }}
+        .badge-text-hover {{ display: none; }}
+        .update-badge:hover .badge-text-idle {{ display: none; }}
+        .update-badge:hover .badge-text-hover {{ display: inline; }}
+        .dot {{ width: 6px; height: 6px; border-radius: 50%; background-color: #ef4444; box-shadow: 0 0 6px #ef4444; }}
+        @keyframes pulse-border {{ 0%, 100% {{ opacity: 1; }} 50% {{ opacity: 0.45; }} }}
       </style>
     </head>
     <body>
@@ -70,7 +106,8 @@ async def root_landing():
         </div>
         <div class="footer">
           Powered by <a href="https://github.com/mat-ocl/hits" target="_blank" rel="noopener noreferrer">mat-ocl/hits</a>
-          <span class="version-badge">v{html.escape(ver_info["current"])}</span>
+          <span class="version-badge">v{safe_current_ver}</span>
+          {update_badge_html}
         </div>
       </div>
     </body>

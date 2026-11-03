@@ -97,7 +97,7 @@ Customize the SVG badge using query parameters:
 | `ALLOWED_DOMAINS` | `*` | Comma-separated allowlist of trackable domains (supports exact `example.com` and wildcard `*.example.com`) |
 | `TRUST_PROXY_HEADERS` | `true` | Whether to read the client IP from `X-Forwarded-For` when behind a reverse proxy |
 | `HASH_SALT` | *random 256-bit hex* | Secret salt mixed into daily-rotating visitor IP hashes |
-| `APP_VERSION` | `0.1.8` | Application version string displayed in the dashboard footer |
+| `APP_VERSION` | `0.1.4-dev` | Application version string displayed in the dashboard footer |
 
 ---
 
