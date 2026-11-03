@@ -3,7 +3,7 @@ import os
 import re
 import secrets
 
-CURRENT_VERSION = os.getenv("APP_VERSION", "0.1.4-dev")
+CURRENT_VERSION = os.getenv("APP_VERSION", "0.1.8")
 GITHUB_REPO = "mat-ocl/hits"
 VERSION_CHECK_CACHE_SECONDS = 43200  # 12 hours
 VERSION_CHECK_FAILURE_CACHE_SECONDS = 3600  # 1 hour backoff on failed checks

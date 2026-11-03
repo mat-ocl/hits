@@ -32,7 +32,7 @@ async def get_icon_path(logo_name: str) -> str | None:
             _cache_in_memory(slug, cached_d)
             return None if cached_d == NEGATIVE_CACHE_SENTINEL else cached_d
 
-    url = f"https://cdn.jsdelivr.net/npm/simple-icons@v11/icons/{slug}.svg"
+    url = f"https://cdn.jsdelivr.net/npm/simple-icons@v16/icons/{slug}.svg"
     try:
         if database.http_client:
             resp = await database.http_client.get(url)

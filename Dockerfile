@@ -1,6 +1,6 @@
-FROM python:3.14-slim
+FROM python:3.15-slim
 
-ARG APP_VERSION=0.1.0-dev
+ARG APP_VERSION=0.1.8
 
 WORKDIR /app
 

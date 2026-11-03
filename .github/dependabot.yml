@@ -9,7 +9,7 @@ updates:
     commit-message:
       prefix: "deps(pip)"
 
-  # Docker base image (python:3.14-slim)
+  # Docker base image (python:3.15-slim)
   - package-ecosystem: "docker"
     directory: "/"
     schedule:
