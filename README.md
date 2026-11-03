@@ -107,5 +107,5 @@ Install dependencies and run the test suite:
 
 ```bash
 pip install -r requirements.txt pytest
-pytest -v
+python -m pytest -v
 ```
