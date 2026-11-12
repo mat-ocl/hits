@@ -227,7 +227,7 @@ async def route_handler(
       <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
       <style>
         {SHARED_FOOTER_CSS}
-        .container {{ max-width: 850px; width: 100%; }}
+        .container {{ max-width: 850px; width: 100%; min-inline-size: 0; }}
         .header {{ display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; flex-wrap: wrap; gap: 1rem; }}
         .header-actions {{ display: flex; align-items: center; gap: 1rem; }}
         .gh-link {{ display: inline-flex; align-items: center; gap: 0.4rem; color: #94a3b8; text-decoration: none; font-size: 0.85rem; font-weight: 500; padding: 0.4rem 0.75rem; border-radius: 6px; border: 1px solid #334155; transition: all 0.2s ease; }}
@@ -239,12 +239,34 @@ async def route_handler(
         .stat-label {{ font-size: 0.75rem; color: #94a3b8; text-transform: uppercase; font-weight: 600; letter-spacing: 0.05em; }}
 
         /* Badge Builder Form & Embeds */
-        fieldset {{ border: 0; margin: 0; padding: 0; }}
-        legend {{ font-size: 1.05rem; font-weight: 600; color: #f8fafc; margin-bottom: 1rem; padding: 0; }}
+        .builder-details {{ margin-bottom: 1.5rem; }}
+        .builder-toggle {{
+          display: inline-flex;
+          align-items: center;
+          gap: 0.5rem;
+          list-style: none;
+          background: #1e293b;
+          color: #f8fafc;
+          border: 1px solid #334155;
+          border-radius: 8px;
+          padding: 0.65rem 1.1rem;
+          font-size: 0.9rem;
+          font-weight: 600;
+          cursor: pointer;
+          user-select: none;
+          transition: all 0.2s ease;
+        }}
+        .builder-toggle::-webkit-details-marker {{ display: none; }}
+        .builder-toggle::before {{ content: "▸"; color: #38bdf8; }}
+        .builder-details[open] > .builder-toggle::before {{ content: "▾"; }}
+        .builder-details[open] > .builder-toggle {{ margin-bottom: 0.75rem; }}
+        .builder-toggle:hover {{ background: #334155; border-color: #475569; }}
         .builder-grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1.15rem; margin-bottom: 1.25rem; }}
-        .form-field {{ display: flex; flex-direction: column; }}
+        .form-field {{ display: flex; flex-direction: column; min-inline-size: 0; }}
         .form-field label {{ font-size: 0.8rem; font-weight: 600; color: #cbd5e1; margin-bottom: 0.35rem; }}
         .form-field input, .form-field select {{
+          width: 100%;
+          min-inline-size: 0;
           font-size: 1rem;
           padding: 0.55rem 0.75rem;
           min-height: 42px;
@@ -254,7 +276,15 @@ async def route_handler(
           color: #f8fafc;
           box-sizing: border-box;
         }}
-        .form-field input:focus-visible, .form-field select:focus-visible, .copy-btn:focus-visible {{
+        .color-input-row {{ display: flex; gap: 0.5rem; align-items: center; min-inline-size: 0; }}
+        .form-field input[type="color"] {{
+          width: 42px;
+          height: 42px;
+          padding: 0.2rem;
+          cursor: pointer;
+          flex-shrink: 0;
+        }}
+        .form-field input:focus-visible, .form-field select:focus-visible, .copy-btn:focus-visible, .builder-toggle:focus-visible {{
           outline: 2px solid #38bdf8;
           outline-offset: 2px;
         }}
@@ -273,12 +303,13 @@ async def route_handler(
         }}
         .preview-label {{ font-size: 0.8rem; color: #94a3b8; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; }}
         .snippet-list {{ display: flex; flex-direction: column; gap: 0.75rem; }}
-        .snippet-row {{ display: flex; flex-direction: column; gap: 0.3rem; }}
+        .snippet-row {{ display: flex; flex-direction: column; gap: 0.3rem; min-inline-size: 0; }}
         .snippet-title {{ font-size: 0.75rem; color: #94a3b8; font-weight: 600; }}
         .snippet-box {{
           display: flex;
           align-items: center;
           gap: 0.5rem;
+          min-inline-size: 0;
           background: #0f172a;
           border: 1px solid #334155;
           border-radius: 6px;
@@ -286,6 +317,7 @@ async def route_handler(
         }}
         .snippet-code {{
           flex: 1;
+          min-inline-size: 0;
           font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
           font-size: 0.82rem;
           color: #e2e8f0;
@@ -328,10 +360,10 @@ async def route_handler(
           <div class="stat-box"><div class="stat-label">All-Time</div><div class="stat-value">{stats["total"]}</div></div>
         </div>
         <div class="card"><canvas id="hitsChart"></canvas></div>
-        <div class="card">
-          <form id="badgeBuilderForm" action="/{safe_page_key}.svg" method="GET">
-            <fieldset>
-              <legend>Badge &amp; Embed Builder</legend>
+        <details class="builder-details">
+          <summary class="builder-toggle">Badge &amp; Embed Builder</summary>
+          <div class="card">
+            <form id="badgeBuilderForm" action="/{safe_page_key}.svg" method="GET">
               <div class="builder-grid">
                 <div class="form-field">
                   <label for="b-style">Style</label>
@@ -357,16 +389,29 @@ async def route_handler(
                   <input type="text" id="b-label" name="label" placeholder="hits" maxlength="40" />
                 </div>
                 <div class="form-field">
-                  <label for="b-color">Badge Color</label>
-                  <input type="text" id="b-color" name="color" value="4c1" maxlength="20" autocorrect="off" autocapitalize="off" spellcheck="false" />
+                  <label for="b-logo">Logo (Simple Icons)</label>
+                  <input type="text" id="b-logo" name="logo" placeholder="github, python..." maxlength="40" autocorrect="off" autocapitalize="none" spellcheck="false" />
                 </div>
                 <div class="form-field">
                   <label for="b-label-color">Label Color</label>
-                  <input type="text" id="b-label-color" name="labelColor" value="555" maxlength="20" autocorrect="off" autocapitalize="off" spellcheck="false" />
+                  <div class="color-input-row">
+                    <input type="text" id="b-label-color" name="labelColor" value="555" maxlength="20" autocorrect="off" autocapitalize="none" spellcheck="false" />
+                    <input type="color" id="b-label-color-picker" value="#555555" aria-label="Pick label color" />
+                  </div>
                 </div>
                 <div class="form-field">
-                  <label for="b-logo">Logo (Simple Icons)</label>
-                  <input type="text" id="b-logo" name="logo" placeholder="github, python..." maxlength="40" autocorrect="off" autocapitalize="off" spellcheck="false" />
+                  <label for="b-color">Badge Color</label>
+                  <div class="color-input-row">
+                    <input type="text" id="b-color" name="color" value="4c1" maxlength="20" autocorrect="off" autocapitalize="none" spellcheck="false" />
+                    <input type="color" id="b-color-picker" value="#44cc11" aria-label="Pick badge color" />
+                  </div>
+                </div>
+                <div class="form-field">
+                  <label for="b-preview">Mode</label>
+                  <select id="b-preview" name="preview">
+                    <option value="">count hits</option>
+                    <option value="preview">preview (no count)</option>
+                  </select>
                 </div>
               </div>
               <div class="preview-bar">
@@ -403,9 +448,9 @@ async def route_handler(
                   </div>
                 </div>
               </div>
-            </fieldset>
-          </form>
-        </div>
+            </form>
+          </div>
+        </details>
         {_render_footer(ver_info)}
       </div>
       <script>
@@ -443,27 +488,35 @@ async def route_handler(
         const snipPixel = document.getElementById('snip-pixel');
         const snipJson = document.getElementById('snip-json');
 
+        const toHex6 = (v) => /^#?[0-9a-f]{{3}}$/i.test(v) ? '#' + v.replace('#', '').replace(/(.)/g, '$1$1') : (/^#?[0-9a-f]{{6}}$/i.test(v) ? '#' + v.replace('#', '') : null);
+        [['b-label-color', 'b-label-color-picker'], ['b-color', 'b-color-picker']].forEach(([txtId, pickId]) => {{
+          const txt = document.getElementById(txtId);
+          const pick = document.getElementById(pickId);
+          pick.addEventListener('input', () => {{ txt.value = pick.value.slice(1); }});
+          txt.addEventListener('input', () => {{ const h = toHex6(txt.value.trim()); if (h) pick.value = h; }});
+        }});
+
         function updateEmbeds() {{
           const params = new URLSearchParams();
           const style = document.getElementById('b-style').value;
           const period = document.getElementById('b-period').value;
           const label = document.getElementById('b-label').value.trim();
-          const color = document.getElementById('b-color').value.trim();
-          const labelColor = document.getElementById('b-label-color').value.trim();
           const logo = document.getElementById('b-logo').value.trim();
+          const labelColor = document.getElementById('b-label-color').value.trim().replace(/^#/, '');
+          const color = document.getElementById('b-color').value.trim().replace(/^#/, '');
+          const isPreview = document.getElementById('b-preview').value === 'preview';
 
           if (style && style !== 'flat') params.set('style', style);
           if (period && period !== 'all') params.set('period', period);
           if (label) params.set('label', label);
-          if (color && color !== '4c1') params.set('color', color);
-          if (labelColor && labelColor !== '555') params.set('labelColor', labelColor);
           if (logo) params.set('logo', logo);
+          if (labelColor && labelColor !== '555' && labelColor !== '555555') params.set('labelColor', labelColor);
+          if (color && color !== '4c1' && color !== '44cc11') params.set('color', color);
 
-          const qs = params.toString();
-          const querySuffix = qs ? `?${{qs}}` : '';
-          const previewParams = new URLSearchParams(params);
-          previewParams.set('preview', '');
-          previewImg.src = `/${{pageKey}}.svg?${{previewParams.toString()}}`;
+          const baseQs = params.toString();
+          const previewQs = baseQs ? `${{baseQs}}&preview` : 'preview';
+          const querySuffix = isPreview ? `?${{previewQs}}` : (baseQs ? `?${{baseQs}}` : '');
+          previewImg.src = `/${{pageKey}}.svg?${{previewQs}}`;
 
           const origin = window.location.origin;
           const badgeUrl = `${{origin}}/${{pageKey}}.svg${{querySuffix}}`;
