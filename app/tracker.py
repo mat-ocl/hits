@@ -20,7 +20,7 @@ async def record_visit(
     is_bot = crawler_detect.isCrawler(user_agent) if user_agent else False
 
     client_ip = (
-        x_forwarded_for.split(",")[0].strip()
+        x_forwarded_for.split(",")[-1].strip()
         if (TRUST_PROXY_HEADERS and x_forwarded_for)
         else (request.client.host if request.client else "unknown")
     )
@@ -32,16 +32,20 @@ async def record_visit(
     counter_key = f"hits:{page_key}"
     daily_key = f"hits:{page_key}:daily"
 
-
     if not (is_bot or is_prefetch) and database.redis_client:
-        was_set = await database.redis_client.set(
-            dedupe_key, "1", ex=DEDUPE_WINDOW_SECONDS, nx=True
+        was_set = (
+            await database.redis_client.set(
+                dedupe_key, "1", ex=DEDUPE_WINDOW_SECONDS, nx=True
+            )
+            if DEDUPE_WINDOW_SECONDS > 0
+            else True
         )
         if was_set:
             async with database.redis_client.pipeline(transaction=True) as pipe:
                 pipe.incr(counter_key)
                 pipe.hincrby(daily_key, today_str, 1)
                 await pipe.execute()
+
 
 def calculate_time_windows(daily_data: dict[str, str]) -> dict:
     today = datetime.now(timezone.utc).date()
@@ -64,23 +68,35 @@ def calculate_time_windows(daily_data: dict[str, str]) -> dict:
         "chart_values": chart_values,
     }
 
+
+async def get_page_stats(page_key: str) -> dict:
+    stored_total = int(await database.redis_client.get(f"hits:{page_key}") or 0)
+    daily_data = await database.redis_client.hgetall(f"hits:{page_key}:daily")
+    metrics = calculate_time_windows(daily_data)
+    total_hits = max(stored_total, sum(int(v) for v in daily_data.values()))
+    return {"total": total_hits, "daily": daily_data, **metrics}
+
+
 async def calculate_period_hits(page_key: str, period: str) -> tuple[str, int]:
     if not database.redis_client:
         return "hits", 0
 
-    if period == "all":
-        count = int(await database.redis_client.get(f"hits:{page_key}") or 0)
-        return "hits", count
-
-    daily_data = await database.redis_client.hgetall(f"hits:{page_key}:daily")
-    metrics = calculate_time_windows(daily_data)
+    today = datetime.now(timezone.utc).date()
+    daily_key = f"hits:{page_key}:daily"
 
     if period == "today":
-        return "today", metrics["today"]
-    if period in ("7d", "weekly"):
-        return "7d", metrics["weekly"]
-    if period in ("30d", "monthly"):
-        return "30d", metrics["monthly"]
+        val = await database.redis_client.hget(daily_key, today.strftime("%Y-%m-%d"))
+        return "today", int(val or 0)
 
-    count = int(await database.redis_client.get(f"hits:{page_key}") or 0)
-    return "hits", count
+    if period in ("7d", "weekly"):
+        keys = [(today - timedelta(days=i)).strftime("%Y-%m-%d") for i in range(7)]
+        vals = await database.redis_client.hmget(daily_key, keys)
+        return "7d", sum(int(v or 0) for v in vals)
+
+    if period in ("30d", "monthly"):
+        keys = [(today - timedelta(days=i)).strftime("%Y-%m-%d") for i in range(30)]
+        vals = await database.redis_client.hmget(daily_key, keys)
+        return "30d", sum(int(v or 0) for v in vals)
+
+    stats = await get_page_stats(page_key)
+    return "hits", stats["total"]

@@ -107,6 +107,12 @@ def build_badge_svg(
         lx = (lw + logo_offset) / 2
         cx = lw + (cw / 2)
         logo_svg = render_logo_svg(icon_path_d, logo_color, x_pos=6, y_offset=3, size=14) if has_logo else ""
+        text_group = f"""<g fill="#fff" text-anchor="middle" font-family="DejaVu Sans,Verdana,Geneva,sans-serif" font-size="11">
+  <text x="{lx}" y="15" fill="#010101" fill-opacity=".3">{safe_label}</text>
+  <text x="{lx}" y="14">{safe_label}</text>
+  <text x="{cx}" y="15" fill="#010101" fill-opacity=".3">{safe_count}</text>
+  <text x="{cx}" y="14">{safe_count}</text>
+</g>"""
 
         # 2. SOCIAL
         if style_norm == "social":
@@ -136,12 +142,7 @@ def build_badge_svg(
   {logo_svg}
   <rect width="{tw}" height="20" fill="url(#p)"/>
 </g>
-<g fill="#fff" text-anchor="middle" font-family="DejaVu Sans,Verdana,Geneva,sans-serif" font-size="11">
-  <text x="{lx}" y="15" fill="#010101" fill-opacity=".3">{safe_label}</text>
-  <text x="{lx}" y="14">{safe_label}</text>
-  <text x="{cx}" y="15" fill="#010101" fill-opacity=".3">{safe_count}</text>
-  <text x="{cx}" y="14">{safe_count}</text>
-</g>"""
+{text_group}"""
 
         # 4. FLAT-SQUARE
         elif style_norm in ("flat-square", "square"):
@@ -150,12 +151,7 @@ def build_badge_svg(
   <rect x="{lw}" width="{cw}" height="20" fill="{bg_color}"/>
   {logo_svg}
 </g>
-<g fill="#fff" text-anchor="middle" font-family="DejaVu Sans,Verdana,Geneva,sans-serif" font-size="11">
-  <text x="{lx}" y="15" fill="#010101" fill-opacity=".3">{safe_label}</text>
-  <text x="{lx}" y="14">{safe_label}</text>
-  <text x="{cx}" y="15" fill="#010101" fill-opacity=".3">{safe_count}</text>
-  <text x="{cx}" y="14">{safe_count}</text>
-</g>"""
+{text_group}"""
 
         # 5. FLAT (Default)
         else:
@@ -167,12 +163,7 @@ def build_badge_svg(
   {logo_svg}
   <rect width="{tw}" height="20" fill="url(#b)"/>
 </g>
-<g fill="#fff" text-anchor="middle" font-family="DejaVu Sans,Verdana,Geneva,sans-serif" font-size="11">
-  <text x="{lx}" y="15" fill="#010101" fill-opacity=".3">{safe_label}</text>
-  <text x="{lx}" y="14">{safe_label}</text>
-  <text x="{cx}" y="15" fill="#010101" fill-opacity=".3">{safe_count}</text>
-  <text x="{cx}" y="14">{safe_count}</text>
-</g>"""
+{text_group}"""
 
     if link_url:
         safe_link = html.escape(link_url, quote=True)

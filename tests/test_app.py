@@ -5,9 +5,9 @@ import unittest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from app import badge, config, database, icons, tracker
+from app import badge, config, database, icons, tracker, version
 from app.routes import (
-     favicon,
+    favicon,
     health_check,
     robots_txt,
     root_landing,
@@ -64,8 +64,32 @@ class FakeRedis:
     async def hgetall(self, key: str) -> dict[str, str]:
         return dict(self.hashes.get(key, {}))
 
+    async def hget(self, key: str, field: str) -> str | None:
+        return self.hashes.get(key, {}).get(field)
+
+    async def hmget(self, key: str, fields: list[str]) -> list[str | None]:
+        h = self.hashes.get(key, {})
+        return [h.get(f) for f in fields]
+
     def pipeline(self, transaction: bool = True) -> FakePipeline:
         return FakePipeline(self)
+
+
+class DummyHttpResponse:
+    def __init__(self, status_code: int, payload: dict | None = None):
+        self.status_code = status_code
+        self._payload = payload or {}
+
+    def json(self) -> dict:
+        return self._payload
+
+
+class DummyHttpClient:
+    def __init__(self, response: DummyHttpResponse):
+        self.response = response
+
+    async def get(self, url: str, headers: dict | None = None) -> DummyHttpResponse:
+        return self.response
 
 
 class DummyClient:
@@ -257,6 +281,34 @@ class TestHitsApp(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual(dash_resp.status_code, 200)
         self.assertIn(b"badgeBuilderForm", dash_resp.body)
+
+    async def test_version_check_and_failure_backoff(self):
+        database.http_client = DummyHttpClient(DummyHttpResponse(200, {"tag_name": "v9.9.9"}))
+        info = await version.check_for_updates()
+        self.assertTrue(info["has_update"])
+        self.assertEqual(info["latest"], "9.9.9")
+
+        self.fake_redis.kv.clear()
+        database.http_client = DummyHttpClient(DummyHttpResponse(404))
+        info_fail = await version.check_for_updates()
+        self.assertFalse(info_fail["has_update"])
+        self.assertEqual(self.fake_redis.kv.get("system:latest_version"), info_fail["current"])
+
+    async def test_zero_dedupe_and_xff_spoof_resistance(self):
+        req = DummyRequest()
+        # Spoofing leftmost X-Forwarded-For does not bypass deduplication when rightmost IP is unchanged
+        await tracker.record_visit("example.com/p", req, "Mozilla/5.0", "1.1.1.1, 198.51.100.5", None, None)
+        await tracker.record_visit("example.com/p", req, "Mozilla/5.0", "2.2.2.2, 198.51.100.5", None, None)
+        self.assertEqual(self.fake_redis.kv.get("hits:example.com/p"), "1")
+
+        # DEDUPE_WINDOW_SECONDS=0 counts every visit without error
+        orig_window = tracker.DEDUPE_WINDOW_SECONDS
+        try:
+            tracker.DEDUPE_WINDOW_SECONDS = 0
+            await tracker.record_visit("example.com/p", req, "Mozilla/5.0", "198.51.100.5", None, None)
+            self.assertEqual(self.fake_redis.kv.get("hits:example.com/p"), "2")
+        finally:
+            tracker.DEDUPE_WINDOW_SECONDS = orig_window
 
 
 if __name__ == "__main__":

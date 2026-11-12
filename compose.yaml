@@ -8,7 +8,7 @@ services:
     environment:
       - REDIS_URL=redis://hits_redis:6379
       - DEDUPE_WINDOW_SECONDS=300
-      - ALLOWED_DOMAINS=*
+      - ALLOWED_DOMAINS=example.com # Comma-separated domains, or * to allow all
       - TRUST_PROXY_HEADERS=true
     depends_on:
       hits_redis:

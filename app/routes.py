@@ -10,7 +10,7 @@ from app.config import (
     TRANSPARENT_1X1_PNG,
     is_domain_allowed,
 )
-from app.tracker import record_visit, calculate_period_hits, calculate_time_windows
+from app.tracker import record_visit, calculate_period_hits, get_page_stats
 from app.version import check_for_updates
 from app.icons import get_icon_path
 from app.badge import build_badge_svg
@@ -30,23 +30,54 @@ NO_CACHE_HEADERS = {
     "Expires": "0",
 }
 
+SHARED_FOOTER_CSS = """
+        :root { color-scheme: dark; }
+        body { font-family: system-ui, -apple-system, sans-serif; background: #0f172a; color: #f8fafc; padding: 2rem; display: flex; justify-content: center; }
+        .card { background: #1e293b; border-radius: 12px; padding: 1.5rem; margin-bottom: 1.5rem; border: 1px solid #334155; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1); }
+        code { color: #38bdf8; background: #334155; padding: 0.2rem 0.4rem; border-radius: 4px; }
+        .footer { display: flex; justify-content: center; align-items: center; margin-top: 2rem; color: #64748b; font-size: 0.8rem; flex-wrap: wrap; gap: 0.35rem; }
+        .footer a { color: #94a3b8; text-decoration: none; }
+        .footer a:hover { text-decoration: underline; }
+        .version-badge { display: inline-block; padding: 0.1rem 0.4rem; font-size: 0.75rem; background: #1e293b; border: 1px solid #334155; border-radius: 4px; color: #94a3b8; }
+        .update-arrow { color: #475569; font-size: 0.85rem; user-select: none; margin: 0 0.1rem; }
+        .update-badge {
+          display: inline-flex; align-items: center; gap: 0.35rem; padding: 0.1rem 0.45rem;
+          font-size: 0.75rem; font-weight: 600; color: #f87171; background: rgba(239, 68, 68, 0.12);
+          border: 1px solid rgba(239, 68, 68, 0.35); border-radius: 4px; text-decoration: none !important;
+          animation: pulse-border 2s cubic-bezier(0.4, 0, 0.6, 1) infinite; transition: all 0.2s ease-in-out;
+        }
+        .update-badge:hover { background: rgba(239, 68, 68, 0.22); border-color: #ef4444; color: #fca5a5; }
+        .badge-text-hover { display: none; }
+        .update-badge:hover .badge-text-idle { display: none; }
+        .update-badge:hover .badge-text-hover { display: inline; }
+        .dot { width: 6px; height: 6px; border-radius: 50%; background-color: #ef4444; box-shadow: 0 0 6px #ef4444; }
+        @keyframes pulse-border { 0%, 100% { opacity: 1; } 50% { opacity: 0.45; } }
+"""
+
+
+def _render_footer(ver_info: dict) -> str:
+    safe_current = html.escape(ver_info["current"])
+    safe_latest = html.escape(ver_info["latest"])
+    update_html = ""
+    if ver_info["has_update"]:
+        update_html = f"""
+        <span class="update-arrow">&rarr;</span>
+        <a href="https://github.com/mat-ocl/hits/releases/latest" target="_blank" rel="noopener noreferrer" class="update-badge" title="View latest release notes">
+          <span class="dot"></span>
+          <span class="badge-text-idle">v{safe_latest}</span>
+          <span class="badge-text-hover">Update available: v{safe_latest}</span>
+        </a>"""
+    return f"""
+        <div class="footer">
+          Powered by <a href="https://github.com/mat-ocl/hits" target="_blank" rel="noopener noreferrer">mat-ocl/hits</a>
+          <span class="version-badge">v{safe_current}</span>
+          {update_html}
+        </div>"""
 
 
 @app.get("/", response_class=HTMLResponse)
 async def root_landing():
     ver_info = await check_for_updates()
-    safe_current_ver = html.escape(ver_info["current"])
-    safe_latest_ver = html.escape(ver_info["latest"])
-    update_badge_html = ""
-    if ver_info["has_update"]:
-        update_badge_html = f"""
-        <span class="update-arrow">&rarr;</span>
-        <a href="https://github.com/mat-ocl/hits/releases/latest" target="_blank" rel="noopener noreferrer" class="update-badge" title="View latest release notes">
-          <span class="dot"></span>
-          <span class="badge-text-idle">v{safe_latest_ver}</span>
-          <span class="badge-text-hover">Update available: v{safe_latest_ver}</span>
-        </a>
-        """
     html_content = f"""
     <!DOCTYPE html>
     <html lang="en">
@@ -54,41 +85,12 @@ async def root_landing():
       <meta charset="UTF-8" />
       <title>hits - Website Hit Counter Service</title>
       <style>
-        :root {{ color-scheme: dark; }}
-        body {{ font-family: system-ui, -apple-system, sans-serif; background: #0f172a; color: #f8fafc; padding: 2rem; display: flex; justify-content: center; }}
+        {SHARED_FOOTER_CSS}
         .container {{ max-width: 720px; width: 100%; }}
-        .card {{ background: #1e293b; border-radius: 12px; padding: 1.5rem; margin-bottom: 1.25rem; border: 1px solid #334155; }}
         h1 {{ margin-top: 0; font-size: 1.6rem; }}
         h3 {{ margin-top: 0; color: #38bdf8; font-size: 1rem; }}
         p {{ color: #cbd5e1; line-height: 1.5; }}
-        code {{ color: #38bdf8; background: #334155; padding: 0.2rem 0.45rem; border-radius: 4px; font-size: 0.9rem; }}
         ul {{ color: #cbd5e1; line-height: 1.8; padding-left: 1.25rem; }}
-        .footer {{ display: flex; justify-content: center; align-items: center; margin-top: 2rem; color: #64748b; font-size: 0.8rem; flex-wrap: wrap; gap: 0.35rem; }}
-        .footer a {{ color: #94a3b8; text-decoration: none; }}
-        .footer a:hover {{ text-decoration: underline; }}
-        .version-badge {{ display: inline-block; padding: 0.1rem 0.4rem; font-size: 0.75rem; background: #1e293b; border: 1px solid #334155; border-radius: 4px; color: #94a3b8; }}
-        .update-arrow {{ color: #475569; font-size: 0.85rem; user-select: none; margin: 0 0.1rem; }}
-        .update-badge {{
-          display: inline-flex;
-          align-items: center;
-          gap: 0.35rem;
-          padding: 0.1rem 0.45rem;
-          font-size: 0.75rem;
-          font-weight: 600;
-          color: #f87171;
-          background: rgba(239, 68, 68, 0.12);
-          border: 1px solid rgba(239, 68, 68, 0.35);
-          border-radius: 4px;
-          text-decoration: none !important;
-          animation: pulse-border 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
-          transition: all 0.2s ease-in-out;
-        }}
-        .update-badge:hover {{ background: rgba(239, 68, 68, 0.22); border-color: #ef4444; color: #fca5a5; }}
-        .badge-text-hover {{ display: none; }}
-        .update-badge:hover .badge-text-idle {{ display: none; }}
-        .update-badge:hover .badge-text-hover {{ display: inline; }}
-        .dot {{ width: 6px; height: 6px; border-radius: 50%; background-color: #ef4444; box-shadow: 0 0 6px #ef4444; }}
-        @keyframes pulse-border {{ 0%, 100% {{ opacity: 1; }} 50% {{ opacity: 0.45; }} }}
       </style>
     </head>
     <body>
@@ -104,11 +106,7 @@ async def root_landing():
             <li><code>/{{domain.tld}}/{{path}}</code> &mdash; Analytics dashboard</li>
           </ul>
         </div>
-        <div class="footer">
-          Powered by <a href="https://github.com/mat-ocl/hits" target="_blank" rel="noopener noreferrer">mat-ocl/hits</a>
-          <span class="version-badge">v{safe_current_ver}</span>
-          {update_badge_html}
-        </div>
+        {_render_footer(ver_info)}
       </div>
     </body>
     </html>
@@ -178,19 +176,15 @@ async def route_handler(
         if not is_preview:
             await record_visit(page_key, request, user_agent or "", x_forwarded_for, purpose, sec_purpose)
 
-        stored_total = int(await database.redis_client.get(f"hits:{page_key}") or 0)
-        daily_data = await database.redis_client.hgetall(f"hits:{page_key}:daily")
-        metrics = calculate_time_windows(daily_data)
-        total_hits = max(stored_total, sum(int(v) for v in daily_data.values()))
-
+        stats = await get_page_stats(page_key)
         return JSONResponse(
             content={
                 "page": page_key,
-                "total": total_hits,
-                "today": metrics["today"],
-                "last_7_days": metrics["weekly"],
-                "last_30_days": metrics["monthly"],
-                "daily": daily_data,
+                "total": stats["total"],
+                "today": stats["today"],
+                "last_7_days": stats["weekly"],
+                "last_30_days": stats["monthly"],
+                "daily": stats["daily"],
             },
             headers=NO_CACHE_HEADERS,
         )
@@ -219,29 +213,10 @@ async def route_handler(
             headers=NO_CACHE_HEADERS,
         )
 
-
     # HTML Dashboard
-    stored_total = int(await database.redis_client.get(f"hits:{page_key}") or 0)
-    daily_data = await database.redis_client.hgetall(f"hits:{page_key}:daily")
-    metrics = calculate_time_windows(daily_data)
-    total_hits = max(stored_total, sum(int(v) for v in daily_data.values()))
-
+    stats = await get_page_stats(page_key)
     ver_info = await check_for_updates()
     safe_page_key = html.escape(page_key, quote=True)
-    safe_current_ver = html.escape(ver_info["current"])
-    safe_latest_ver = html.escape(ver_info["latest"])
-
-    # Dynamic update badge next to current version
-    update_badge_html = ""
-    if ver_info["has_update"]:
-        update_badge_html = f"""
-        <span class="update-arrow">&rarr;</span>
-        <a href="https://github.com/mat-ocl/hits/releases/latest" target="_blank" rel="noopener noreferrer" class="update-badge" title="View latest release notes">
-          <span class="dot"></span>
-          <span class="badge-text-idle">v{safe_latest_ver}</span>
-          <span class="badge-text-hover">Update available: v{safe_latest_ver}</span>
-        </a>
-        """
 
     html_content = f"""
     <!DOCTYPE html>
@@ -251,20 +226,17 @@ async def route_handler(
       <title>Analytics - {safe_page_key}</title>
       <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
       <style>
-        :root {{ color-scheme: dark; }}
-        body {{ font-family: system-ui, -apple-system, sans-serif; background: #0f172a; color: #f8fafc; padding: 2rem; display: flex; justify-content: center; }}
+        {SHARED_FOOTER_CSS}
         .container {{ max-width: 850px; width: 100%; }}
         .header {{ display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; flex-wrap: wrap; gap: 1rem; }}
         .header-actions {{ display: flex; align-items: center; gap: 1rem; }}
         .gh-link {{ display: inline-flex; align-items: center; gap: 0.4rem; color: #94a3b8; text-decoration: none; font-size: 0.85rem; font-weight: 500; padding: 0.4rem 0.75rem; border-radius: 6px; border: 1px solid #334155; transition: all 0.2s ease; }}
         .gh-link:hover {{ color: #f8fafc; background: #1e293b; border-color: #475569; }}
         .gh-link svg {{ width: 16px; height: 16px; fill: currentColor; }}
-        .card {{ background: #1e293b; border-radius: 12px; padding: 1.5rem; margin-bottom: 1.5rem; border: 1px solid #334155; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1); }}
         .stats-grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 1rem; margin-bottom: 1.5rem; }}
         .stat-box {{ background: #1e293b; padding: 1.25rem; border-radius: 10px; border: 1px solid #334155; }}
         .stat-value {{ font-size: 1.75rem; font-weight: 700; color: #38bdf8; margin-top: 0.25rem; }}
         .stat-label {{ font-size: 0.75rem; color: #94a3b8; text-transform: uppercase; font-weight: 600; letter-spacing: 0.05em; }}
-        code {{ color: #38bdf8; background: #334155; padding: 0.2rem 0.4rem; border-radius: 4px; }}
 
         /* Badge Builder Form & Embeds */
         fieldset {{ border: 0; margin: 0; padding: 0; }}
@@ -335,53 +307,6 @@ async def route_handler(
           flex-shrink: 0;
         }}
         .copy-btn:hover {{ background: #475569; }}
-
-        /* Footer & Version Badges */
-        .footer {{ display: flex; justify-content: center; align-items: center; margin-top: 2rem; color: #64748b; font-size: 0.8rem; flex-wrap: wrap; gap: 0.35rem; }}
-        .footer a {{ color: #94a3b8; text-decoration: none; }}
-        .footer a:hover {{ text-decoration: underline; }}
-        .version-badge {{ display: inline-block; padding: 0.1rem 0.4rem; font-size: 0.75rem; background: #1e293b; border: 1px solid #334155; border-radius: 4px; color: #94a3b8; }}
-        
-        .update-arrow {{ color: #475569; font-size: 0.85rem; user-select: none; margin: 0 0.1rem; }}
-        
-        /* Pulsing Update Badge */
-        .update-badge {{
-          display: inline-flex;
-          align-items: center;
-          gap: 0.35rem;
-          padding: 0.1rem 0.45rem;
-          font-size: 0.75rem;
-          font-weight: 600;
-          color: #f87171;
-          background: rgba(239, 68, 68, 0.12);
-          border: 1px solid rgba(239, 68, 68, 0.35);
-          border-radius: 4px;
-          text-decoration: none !important;
-          animation: pulse-border 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
-          transition: all 0.2s ease-in-out;
-        }}
-        .update-badge:hover {{
-          background: rgba(239, 68, 68, 0.22);
-          border-color: #ef4444;
-          color: #fca5a5;
-        }}
-        .badge-text-hover {{ display: none; }}
-        .update-badge:hover .badge-text-idle {{ display: none; }}
-        .update-badge:hover .badge-text-hover {{ display: inline; }}
-
-        /* Pulsing Dot */
-        .dot {{
-          width: 6px;
-          height: 6px;
-          border-radius: 50%;
-          background-color: #ef4444;
-          box-shadow: 0 0 6px #ef4444;
-        }}
-
-        @keyframes pulse-border {{
-          0%, 100% {{ opacity: 1; }}
-          50% {{ opacity: 0.45; }}
-        }}
       </style>
     </head>
     <body>
@@ -397,10 +322,10 @@ async def route_handler(
           </div>
         </div>
         <div class="stats-grid">
-          <div class="stat-box"><div class="stat-label">Today</div><div class="stat-value">{metrics["today"]}</div></div>
-          <div class="stat-box"><div class="stat-label">Last 7 Days</div><div class="stat-value">{metrics["weekly"]}</div></div>
-          <div class="stat-box"><div class="stat-label">Last 30 Days</div><div class="stat-value">{metrics["monthly"]}</div></div>
-          <div class="stat-box"><div class="stat-label">All-Time</div><div class="stat-value">{total_hits}</div></div>
+          <div class="stat-box"><div class="stat-label">Today</div><div class="stat-value">{stats["today"]}</div></div>
+          <div class="stat-box"><div class="stat-label">Last 7 Days</div><div class="stat-value">{stats["weekly"]}</div></div>
+          <div class="stat-box"><div class="stat-label">Last 30 Days</div><div class="stat-value">{stats["monthly"]}</div></div>
+          <div class="stat-box"><div class="stat-label">All-Time</div><div class="stat-value">{stats["total"]}</div></div>
         </div>
         <div class="card"><canvas id="hitsChart"></canvas></div>
         <div class="card">
@@ -481,21 +406,17 @@ async def route_handler(
             </fieldset>
           </form>
         </div>
-        <div class="footer">
-          Powered by <a href="https://github.com/mat-ocl/hits" target="_blank" rel="noopener noreferrer">mat-ocl/hits</a>
-          <span class="version-badge">v{safe_current_ver}</span>
-          {update_badge_html}
-        </div>
+        {_render_footer(ver_info)}
       </div>
       <script>
         const ctx = document.getElementById('hitsChart').getContext('2d');
         new Chart(ctx, {{
           type: 'line',
           data: {{
-            labels: {metrics["chart_labels"]},
+            labels: {stats["chart_labels"]},
             datasets: [{{
               label: 'Daily Hits (Past 30 Days)',
-              data: {metrics["chart_values"]},
+              data: {stats["chart_values"]},
               borderColor: '#38bdf8',
               backgroundColor: 'rgba(56, 189, 248, 0.15)',
               borderWidth: 2,
