@@ -1,15 +1,15 @@
-import fnmatch
 import os
 import re
 import secrets
 
-CURRENT_VERSION = os.getenv("APP_VERSION", "0.1.4-dev")
+CURRENT_VERSION = os.getenv("APP_VERSION", "0.1.0-dev")
 GITHUB_REPO = "mat-ocl/hits"
 VERSION_CHECK_CACHE_SECONDS = 43200  # 12 hours
 VERSION_CHECK_FAILURE_CACHE_SECONDS = 3600  # 1 hour backoff on failed checks
 
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379")
 DEDUPE_WINDOW_SECONDS = int(os.getenv("DEDUPE_WINDOW_SECONDS", "600"))
+RATE_LIMIT_PER_MINUTE = int(os.getenv("RATE_LIMIT_PER_MINUTE", "60"))  # counted visits per IP per minute, 0 = off
 TRUST_PROXY_HEADERS = os.getenv("TRUST_PROXY_HEADERS", "true").lower() in ("1", "true", "yes")
 HASH_SALT = os.getenv("HASH_SALT") or secrets.token_hex(32)
 ALLOWED_DOMAINS = [
@@ -31,7 +31,7 @@ def is_domain_allowed(page_key: str) -> bool:
             base = pattern[2:]
             if domain == base or domain.endswith(f".{base}"):
                 return True
-        elif fnmatch.fnmatch(domain, pattern):
+        elif domain == pattern:
             return True
     return False
 

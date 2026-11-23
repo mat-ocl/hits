@@ -1,4 +1,5 @@
 from __future__ import annotations
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 import sys
 import unittest
@@ -74,6 +75,13 @@ class FakeRedis:
     def pipeline(self, transaction: bool = True) -> FakePipeline:
         return FakePipeline(self)
 
+    async def incr(self, key: str) -> int:
+        self.kv[key] = str(int(self.kv.get(key, "0")) + 1)
+        return int(self.kv[key])
+
+    async def expire(self, key: str, seconds: int) -> bool:
+        return True
+
 
 class DummyHttpResponse:
     def __init__(self, status_code: int, payload: dict | None = None):
@@ -88,7 +96,7 @@ class DummyHttpClient:
     def __init__(self, response: DummyHttpResponse):
         self.response = response
 
-    async def get(self, url: str, headers: dict | None = None) -> DummyHttpResponse:
+    async def get(self, url: str, headers: dict | None = None, timeout: float | None = None) -> DummyHttpResponse:
         return self.response
 
 
@@ -98,9 +106,10 @@ class DummyClient:
 
 
 class DummyRequest:
-    def __init__(self, query_params: dict[str, str] | None = None, host: str = "203.0.113.10"):
+    def __init__(self, query_params: dict[str, str] | None = None, host: str = "203.0.113.10", method: str = "GET"):
         self.query_params = query_params or {}
         self.client = DummyClient(host)
+        self.method = method
 
 
 class TestHitsApp(unittest.IsolatedAsyncioTestCase):
@@ -309,6 +318,47 @@ class TestHitsApp(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(self.fake_redis.kv.get("hits:example.com/p"), "2")
         finally:
             tracker.DEDUPE_WINDOW_SECONDS = orig_window
+
+    async def _get(self, path: str, request: DummyRequest | None = None, ip: str | None = None, ua: str = "Mozilla/5.0"):
+        return await route_handler(
+            path=path, request=request or DummyRequest(), period="all", style="flat", label=None,
+            color="4c1", label_color="555", logo_color="fff", logo=None, link=False,
+            user_agent=ua, x_forwarded_for=ip, purpose=None, sec_purpose=None,
+        )
+
+    async def test_page_key_case_head_and_empty_ua(self):
+        await self._get("Example.com/Home.gif")
+        self.assertEqual(self.fake_redis.kv.get("hits:example.com/home"), "1")
+        # HEAD (monitors) and empty User-Agent (scripts) are not counted
+        await self._get("example.com/home.gif", DummyRequest(method="HEAD"), ip="198.51.100.1")
+        await self._get("example.com/home.gif", ip="198.51.100.2", ua="")
+        self.assertEqual(self.fake_redis.kv.get("hits:example.com/home"), "1")
+
+    async def test_rate_limit_per_ip(self):
+        orig = (tracker.RATE_LIMIT_PER_MINUTE, tracker.DEDUPE_WINDOW_SECONDS)
+        try:
+            tracker.RATE_LIMIT_PER_MINUTE, tracker.DEDUPE_WINDOW_SECONDS = 2, 0
+            for _ in range(5):
+                await self._get("example.com/spam.gif", ip="198.51.100.9")
+            self.assertEqual(self.fake_redis.kv.get("hits:example.com/spam"), "2")
+        finally:
+            tracker.RATE_LIMIT_PER_MINUTE, tracker.DEDUPE_WINDOW_SECONDS = orig
+
+    async def test_period_windows_and_json_daily_ints(self):
+        today = datetime.now(timezone.utc).date()
+        day = lambda n: (today - timedelta(days=n)).strftime("%Y-%m-%d")
+        self.fake_redis.hashes["hits:example.com/p:daily"] = {day(0): "1", day(3): "2", day(10): "4", day(40): "8"}
+        self.fake_redis.kv["hits:example.com/p"] = "15"
+        for period, expected in (("today", 1), ("7d", 3), ("30d", 7), ("all", 15)):
+            _, count = await tracker.calculate_period_hits("example.com/p", period)
+            self.assertEqual(count, expected, period)
+        stats = await tracker.get_page_stats("example.com/p")
+        self.assertTrue(all(isinstance(v, int) for v in stats["daily"].values()))
+
+    def test_version_ordering(self):
+        self.assertLess(version._ver_key("0.1.9-dev"), version._ver_key("0.1.9"))
+        self.assertLess(version._ver_key("0.1.9"), version._ver_key("v0.1.10"))
+        self.assertLess(version._ver_key("0.1.0-dev"), version._ver_key("0.1.8"))
 
 
 if __name__ == "__main__":

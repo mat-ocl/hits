@@ -1,0 +1,8 @@
+.git
+.github
+.venv
+redis_data
+tests
+__pycache__
+.agents
+AGENTS.md

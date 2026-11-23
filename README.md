@@ -49,6 +49,8 @@ Replace `{page}` with `{domain.tld}` or `{domain.tld}/{subpath}` (e.g. `example.
 | `GET /{page}` | Renders the HTML analytics dashboard & interactive Badge Builder | No |
 | `GET /health` | Redis connectivity healthcheck (`200 OK` or `503 Service Unavailable`) | No |
 
+`HEAD` is accepted on every endpoint and never counts. Page paths are case-insensitive (`Example.com/Blog` and `example.com/blog` share one counter).
+
 ---
 
 ## Badge Customization (`/{page}.svg`)
@@ -95,9 +97,10 @@ Customize the SVG badge using query parameters:
 | `REDIS_URL` | `redis://localhost:6379` | Redis connection URL |
 | `DEDUPE_WINDOW_SECONDS` | `600` | Seconds before a repeat visit from the same IP to the same page is counted again |
 | `ALLOWED_DOMAINS` | `*` | Comma-separated allowlist of trackable domains (supports exact `example.com` and wildcard `*.example.com`) |
-| `TRUST_PROXY_HEADERS` | `true` | Whether to read the client IP from `X-Forwarded-For` when behind a reverse proxy |
-| `HASH_SALT` | *random 256-bit hex* | Secret salt mixed into daily-rotating visitor IP hashes |
-| `APP_VERSION` | `0.1.4-dev` | Application version string displayed in the dashboard footer |
+| `TRUST_PROXY_HEADERS` | `true` | Read the client IP from the last `X-Forwarded-For` entry. Only safe behind a reverse proxy that sets that header and with port 8000 not published directly; otherwise anyone can fake the header and inflate counts. Set `false` when exposed directly |
+| `RATE_LIMIT_PER_MINUTE` | `60` | Max counted visits per IP per minute (`0` disables). Limits how fast one client can create new pages or inflate counts |
+| `HASH_SALT` | *random 256-bit hex* | Secret salt mixed into daily-rotating visitor IP hashes. Set a fixed value so a restart does not forget recent visitors |
+| `APP_VERSION` | `0.1.0-dev` | Application version string displayed in the dashboard footer |
 
 ---
 
@@ -106,6 +109,6 @@ Customize the SVG badge using query parameters:
 Install dependencies and run the test suite:
 
 ```bash
-pip install -r requirements.txt pytest
-python -m pytest -v
+pip install -r requirements.txt
+python -m unittest discover -s tests -v
 ```
