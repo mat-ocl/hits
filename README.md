@@ -98,7 +98,7 @@ Customize the SVG badge using query parameters:
 | `DEDUPE_WINDOW_SECONDS` | `600` | Seconds before a repeat visit from the same IP to the same page is counted again |
 | `ALLOWED_DOMAINS` | `*` | Comma-separated allowlist of trackable domains (supports exact `example.com` and wildcard `*.example.com`) |
 | `TRUST_PROXY_HEADERS` | `true` | Read the client IP from the last `X-Forwarded-For` entry. Only safe behind a reverse proxy that sets that header and with port 8000 not published directly; otherwise anyone can fake the header and inflate counts. Set `false` when exposed directly |
-| `RATE_LIMIT_PER_MINUTE` | `60` | Max counted visits per IP per minute (`0` disables). Limits how fast one client can create new pages or inflate counts |
+| `NEW_PAGES_PER_MINUTE` | `60` | Max new pages one IP can create per minute (`0` disables). Stops one client filling Redis with junk page keys; counting existing pages is not limited |
 | `HASH_SALT` | *random 256-bit hex* | Secret salt mixed into daily-rotating visitor IP hashes. Set a fixed value so a restart does not forget recent visitors |
 | `APP_VERSION` | `0.1.0-dev` | Application version string displayed in the dashboard footer |
 

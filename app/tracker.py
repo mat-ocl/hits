@@ -4,7 +4,7 @@ from datetime import datetime, timezone, timedelta
 from fastapi import Request
 from crawlerdetect import CrawlerDetect
 from app import database
-from app.config import DEDUPE_WINDOW_SECONDS, HASH_SALT, RATE_LIMIT_PER_MINUTE, TRUST_PROXY_HEADERS
+from app.config import DEDUPE_WINDOW_SECONDS, HASH_SALT, NEW_PAGES_PER_MINUTE, TRUST_PROXY_HEADERS
 
 crawler_detect = CrawlerDetect()
 
@@ -30,21 +30,23 @@ async def record_visit(
     if is_bot or is_prefetch:
         return
 
-    if RATE_LIMIT_PER_MINUTE > 0:
+    counter_key = f"hits:{page_key}"
+    daily_key = f"hits:{page_key}:daily"
+
+    # Only creating a new page is limited: shared IPs (e.g. GitHub's image proxy) keep counting existing pages freely.
+    if NEW_PAGES_PER_MINUTE > 0 and not await database.redis_client.exists(counter_key):
         ip_hash = hashlib.sha256(f"{HASH_SALT}:{client_ip}".encode()).hexdigest()[:16]
         rate_key = f"rate:{ip_hash}:{int(time.time() // 60)}"
         used = await database.redis_client.incr(rate_key)
         if used == 1:
             await database.redis_client.expire(rate_key, 60)
-        if used > RATE_LIMIT_PER_MINUTE:
+        if used > NEW_PAGES_PER_MINUTE:
             return
 
     visitor_hash = hashlib.sha256(
         f"{HASH_SALT}:{today_str}:{client_ip}:{page_key}".encode()
     ).hexdigest()
     dedupe_key = f"seen:{visitor_hash}"
-    counter_key = f"hits:{page_key}"
-    daily_key = f"hits:{page_key}:daily"
 
     was_set = (
         await database.redis_client.set(dedupe_key, "1", ex=DEDUPE_WINDOW_SECONDS, nx=True)

@@ -79,6 +79,9 @@ class FakeRedis:
         self.kv[key] = str(int(self.kv.get(key, "0")) + 1)
         return int(self.kv[key])
 
+    async def exists(self, key: str) -> int:
+        return int(key in self.kv or key in self.hashes)
+
     async def expire(self, key: str, seconds: int) -> bool:
         return True
 
@@ -334,15 +337,19 @@ class TestHitsApp(unittest.IsolatedAsyncioTestCase):
         await self._get("example.com/home.gif", ip="198.51.100.2", ua="")
         self.assertEqual(self.fake_redis.kv.get("hits:example.com/home"), "1")
 
-    async def test_rate_limit_per_ip(self):
-        orig = (tracker.RATE_LIMIT_PER_MINUTE, tracker.DEDUPE_WINDOW_SECONDS)
+    async def test_new_page_limit_per_ip(self):
+        orig = (tracker.NEW_PAGES_PER_MINUTE, tracker.DEDUPE_WINDOW_SECONDS)
         try:
-            tracker.RATE_LIMIT_PER_MINUTE, tracker.DEDUPE_WINDOW_SECONDS = 2, 0
+            tracker.NEW_PAGES_PER_MINUTE, tracker.DEDUPE_WINDOW_SECONDS = 2, 0
+            for i in range(5):
+                await self._get(f"example.com/new{i}.gif", ip="198.51.100.9")
+            self.assertEqual(len([k for k in self.fake_redis.kv if k.startswith("hits:")]), 2)
+            # existing pages keep counting from the same IP
             for _ in range(5):
-                await self._get("example.com/spam.gif", ip="198.51.100.9")
-            self.assertEqual(self.fake_redis.kv.get("hits:example.com/spam"), "2")
+                await self._get("example.com/new0.gif", ip="198.51.100.9")
+            self.assertEqual(self.fake_redis.kv.get("hits:example.com/new0"), "6")
         finally:
-            tracker.RATE_LIMIT_PER_MINUTE, tracker.DEDUPE_WINDOW_SECONDS = orig
+            tracker.NEW_PAGES_PER_MINUTE, tracker.DEDUPE_WINDOW_SECONDS = orig
 
     async def test_period_windows_and_json_daily_ints(self):
         today = datetime.now(timezone.utc).date()

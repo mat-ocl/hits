@@ -9,7 +9,7 @@ VERSION_CHECK_FAILURE_CACHE_SECONDS = 3600  # 1 hour backoff on failed checks
 
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379")
 DEDUPE_WINDOW_SECONDS = int(os.getenv("DEDUPE_WINDOW_SECONDS", "600"))
-RATE_LIMIT_PER_MINUTE = int(os.getenv("RATE_LIMIT_PER_MINUTE", "60"))  # counted visits per IP per minute, 0 = off
+NEW_PAGES_PER_MINUTE = int(os.getenv("NEW_PAGES_PER_MINUTE", "60"))  # new pages one IP may create per minute, 0 = off
 TRUST_PROXY_HEADERS = os.getenv("TRUST_PROXY_HEADERS", "true").lower() in ("1", "true", "yes")
 HASH_SALT = os.getenv("HASH_SALT") or secrets.token_hex(32)
 ALLOWED_DOMAINS = [
